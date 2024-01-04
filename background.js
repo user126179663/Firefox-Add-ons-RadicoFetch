@@ -1,3 +1,11 @@
+browser.tabs.onUpdated.addListener(
+	(tabId, event)=> {
+		hi(tabId, event);
+		browser.tabs.sendMessage(tabId, { type: 'updated', tabId });
+	},
+	{ urls: [ '*://radiko.jp/*' ], properties: [ 'url' ] }
+);
+
 class Background extends WXLogger {
 	
 	static {
@@ -35,8 +43,8 @@ class Background extends WXLogger {
 			break;
 			
 			case 'string':
-			//todo Radikoのauth2が取得できないなど、例外に遭遇した場合の停止処理やタイムアウト処理
-			(radicoSession[tabId] = new RadicoSession(tabId)).session.
+			//todo ダウンロード中にページ遷移をしたり、Radikoのauth2が取得できないなど、例外に遭遇した場合の停止処理やタイムアウト処理
+			(radicoSession[tabId] = radicoSession[tabId] ??= new RadicoSession(tabId)).session.
 				then(session => tabs.sendMessage(tabId, { session, tabId, type: 'received', uid: message }).
 					then(() => pageAction.show(tabId)));
 			break;
@@ -48,7 +56,7 @@ class Background extends WXLogger {
 					
 					case 'identified':
 					const	{ icon: { downloadable, requesting } } = Background,
-							{ requesting: req } = this,
+							{ log, requesting: req } = this,
 							iconDetails = { tabId: tabId };
 					
 					req[tabId] = true,
@@ -56,7 +64,7 @@ class Background extends WXLogger {
 					pageAction.setIcon(iconDetails),
 					
 					new RadicoFetch().request(message.session).
-						then(() => (iconDetails.path = downloadable, pageAction.setIcon(iconDetails), delete req[tabId])),
+						finally(result => (log(result), iconDetails.path = downloadable, pageAction.setIcon(iconDetails), delete req[tabId])),
 					
 					log('"Tried a request."', message);
 					

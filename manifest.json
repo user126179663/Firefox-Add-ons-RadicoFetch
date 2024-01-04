@@ -29,7 +29,7 @@
 		
 	},
 	
-	"permissions": [ "*://radiko.jp/*", "*://*.smartstream.ne.jp/*", "clipboardWrite", "downloads", "webRequest" ],
+	"permissions": [ "*://radiko.jp/*", "*://*.smartstream.ne.jp/*", "downloads", "tabs", "webRequest" ],
 	
 	"web_accessible_resources": [
 		

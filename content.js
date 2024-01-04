@@ -16,13 +16,23 @@ class Content extends WXLogger {
 		
 		const { log } = this;
 		
-		log("Received a message.", message, sender);
+		log('"Received a message."', message, sender);
 		
 		if (message && typeof message === 'object') {
 			
 			const { ft, stationId } = this;
 			
 			switch (message.type) {
+				
+				case 'identify':
+				
+				const { session } = this;
+				
+				log('"Making inquire a tabId."', session),
+				
+				message.tabId === session?.tabId && browser.runtime.sendMessage({ session, type: 'identified' });
+				
+				break;
 				
 				case 'received':
 				if (message.uid === this.uid) {
@@ -33,19 +43,16 @@ class Content extends WXLogger {
 					session.tabId = message.tabId,
 					session.ft = ft,
 					session.cookie = document.cookie,
+					
+					log('"Responsed a session data."', session),
+					
 					sendResponse();
 					
 				}
 				return true;
 				
-				case 'identify':
-				
-				const { session } = this;
-				
-				log("Making inquire a tabId.", session),
-				
-				message.tabId === session?.tabId && browser.runtime.sendMessage({ session, type: 'identified' });
-				
+				case 'updated':
+				message.tabId === this.session?.tabId && this.exec();
 				break;
 				
 			}
@@ -56,27 +63,47 @@ class Content extends WXLogger {
 	
 	static hidPage() {
 		
+		this.log('"The tab was hidden."'),
+		
 		browser.runtime.sendMessage(false);
 		
 	}
 	
-	constructor(url = location.href) {
+	constructor(url) {
 		
 		super();
 		
-		const pathParts = Content.pathRx.exec(url);
+		if (this.match(url)) {
+			
+			const { onMessage, hidPage } = Content;
+			
+			addEventListener('pagehide', this.hidPage = hidPage.bind(this)),
+			browser.runtime.onMessage.addListener(this.onMessage = onMessage.bind(this));
+			
+		}
+		
+	}
+	
+	match(url = location.href) {
+		
+		return Content.pathRx.exec(url);
+		
+	}
+	
+	exec(url) {
+		
+		const pathParts = this.match(url);
+		
+		//this.log(location.href);
 		
 		if (pathParts) {
-			
-			const { runtime } = browser, { onMessage, hidPage } = Content;
 			
 			this.stationId = pathParts[1],
 			this.ft = pathParts[2],
 			
-			addEventListener('pagehide', this.hidPage = hidPage.bind(this)),
-			runtime.onMessage.addListener(this.onMessage = onMessage.bind(this)),
+			browser.runtime.sendMessage(this.uid ??= crypto.randomUUID()),
 			
-			runtime.sendMessage(this.uid = crypto.randomUUID());
+			this.log('"Detected a program."', location.href);
 			
 		}
 		
@@ -84,6 +111,6 @@ class Content extends WXLogger {
 	
 }
 
-new Content();
+new Content().exec();
 
 })();

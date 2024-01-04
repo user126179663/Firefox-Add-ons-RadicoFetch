@@ -109,6 +109,7 @@ class RadicoFetch extends AbortableFetch {
 		this.rxTargetRequestURL = /^https:\/\/radiko.jp\/v2\/api\/auth1$/,
 		this.rxUrlPathname = /\/tf\/playlist.m3u8$/,
 		this.rxM3U8Url = /^(https:\/\/.*?)$/gm,
+		this.rxPicExt = /(.*?)(set picext=)(.*?)/m,
 		
 		this.maxChunkLength = 300,
 		
@@ -266,7 +267,7 @@ class RadicoFetch extends AbortableFetch {
 		if (prg) {
 			
 			const	{ createObjectURL } = URL,
-					{ dlOption, DOMToObject, getDateStr, maxChunkLength, metaBlobOption } = RadicoFetch,
+					{ rxPicExt, dlOption, DOMToObject, getDateStr, maxChunkLength, metaBlobOption } = RadicoFetch,
 					{ downloads } = browser,
 					to = prg.getAttribute('to'),
 					playlistURLParam = new URLSearchParams(''),
@@ -299,7 +300,8 @@ class RadicoFetch extends AbortableFetch {
 										prgFt.substring(6, 8).padStart(2, '0') + ' ' +
 										prg.getAttribute('ftl') + '-' + prg.getAttribute('tol'),
 					prgCoverURL = prg.querySelector('img').textContent,
-					prgCoverFileName = prgFileName + '.' + new URL(prgCoverURL)?.pathname?.split?.('.')?.at?.(-1),
+					prgCoverExt = new URL(prgCoverURL)?.pathname?.split?.('.')?.at?.(-1),
+					prgCoverFileName = prgFileName + '.' + prgCoverExt,
 					zip = new JSZip(),
 					prgFolder = zip.folder(prgFileName);
 			let i, length, remained, dlUrl, pathname, concat,concatPath;
@@ -312,8 +314,6 @@ class RadicoFetch extends AbortableFetch {
 				playlistURLParam.set('l', length = remained < maxChunkLength ? remained : maxChunkLength),
 				playlistURLParam.set('seek', getDateStr(startTime + (remained < maxChunkLength ? totalDuration - length : length * i) * 1000)),
 				this.log(i, requestLength, remained < maxChunkLength, remained, playlistURLParam.get('l'), playlistURLParam.get('seek'), startTime, totalDuration, remained < maxChunkLength ? totalDuration - length : length * i);
-				
-				//coco? 別のページに移動後に別の番組をダウンロードすると前の番組の内容がダウンロードされる。
 				
 				await	this.getURLsFromM3U8(urlPlaylist + '?' + playlistURLParam, playlistOption).
 							then(urls => this.getURLsFromM3U8(urls[0])).then(urls => dlUrls.push(...urls)).
@@ -330,7 +330,7 @@ class RadicoFetch extends AbortableFetch {
 									then(ab => prgFolder.file(prgCoverFileName, ab)),
 			
 			await	fetch(browser.runtime.getURL('resources/concat.bat')).then(response => response.text()).
-						then(text => prgFolder.file('concat.bat', text));
+						then(text => prgFolder.file('concat.bat', text.replace(rxPicExt, `$1$2${prgCoverExt}$3`)));
 			
 			i = -1, concat = '';
 			while (++i < dlUrlsLength) {
@@ -352,8 +352,11 @@ class RadicoFetch extends AbortableFetch {
 			
 			prgFolder.file(prgFileName + '.txt', concat),
 			
-			await	zip.generateAsync({ type: 'base64' }).
-						then(base64 => (location.href = 'data:application/zip;base64,' + base64));
+			//await	zip.generateAsync({ type: 'base64' }).
+			//			then(base64 => (location.href = 'data:application/zip;base64,' + base64));
+			
+			await	zip.generateAsync({ type: 'blob' }).
+						then(blob => (downloads.download({ filename: prgFileName + '.zip', saveAs: true, url: URL.createObjectURL(blob) })));
 			
 		}
 		
