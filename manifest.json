@@ -1,0 +1,42 @@
+{
+	
+	"background": {
+		
+		"scripts": [ "utils.js", "jszip.min.js", "radico-fetch.js", "background.js" ],
+		"persistent": false
+		
+	},
+	
+	"content_scripts": [
+		{
+			
+			"matches": [ "*://radiko.jp/*" ],
+			"js": [ "utils.js", "content.js" ],
+			"run_at": "document_start"
+			
+		}
+	],
+	
+	"manifest_version": 2,
+	
+	"name": "radico-fetch",
+	
+	"page_action": {
+		
+		"default_icon": "icon.png",
+		"default_title": "Copy"
+		//"show_matches": [ "*://radiko.jp/*" ]
+		
+	},
+	
+	"permissions": [ "*://radiko.jp/*", "*://*.smartstream.ne.jp/*", "clipboardWrite", "downloads", "webRequest" ],
+	
+	"web_accessible_resources": [
+		
+		"concat.bat"
+		
+	],
+	
+	"version": "0.1"
+	
+}
