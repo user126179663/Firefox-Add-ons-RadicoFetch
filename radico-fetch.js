@@ -236,7 +236,15 @@ class RadicoFetch extends AbortableFetch {
 		
 		super();
 		
-		this.uids = {};
+		//this.uids = {};
+		
+	}
+	
+	getURLsFromM3U8(urlStr, option) {
+		
+		const { getURLsFromM3U8, responsedStreamText } = RadicoFetch;
+		
+		return this.fetch(urlStr, option).then(responsedStreamText).then(getURLsFromM3U8);
 		
 	}
 	
@@ -298,8 +306,6 @@ class RadicoFetch extends AbortableFetch {
 			
 			for (const { k, v } of playlistParam) playlistURLParam.append(k, v);
 			
-			//this.fetch(urlPlaylist + '?' + playlistURLParam, playlistOption).then(hi);
-			
 			i = -1;
 			while (++i <= requestLength && (remained = totalDuration - i * maxChunkLength) > 0) {
 				
@@ -307,8 +313,11 @@ class RadicoFetch extends AbortableFetch {
 				playlistURLParam.set('seek', getDateStr(startTime + (remained < maxChunkLength ? totalDuration - length : length * i) * 1000)),
 				this.log(i, requestLength, remained < maxChunkLength, remained, playlistURLParam.get('l'), playlistURLParam.get('seek'), startTime, totalDuration, remained < maxChunkLength ? totalDuration - length : length * i);
 				
+				//coco? 別のページに移動後に別の番組をダウンロードすると前の番組の内容がダウンロードされる。
+				
 				await	this.getURLsFromM3U8(urlPlaylist + '?' + playlistURLParam, playlistOption).
-							then(urls => this.getURLsFromM3U8(urls[0])).then(urls => dlUrls.push(...urls));
+							then(urls => this.getURLsFromM3U8(urls[0])).then(urls => dlUrls.push(...urls)).
+								catch(() => { throw new Error() });
 				
 			}
 			
@@ -320,7 +329,7 @@ class RadicoFetch extends AbortableFetch {
 			prgCoverURL &&	await fetch(prgCoverURL).then(response => response.arrayBuffer()).
 									then(ab => prgFolder.file(prgCoverFileName, ab)),
 			
-			await	fetch(browser.runtime.getURL('concat.bat')).then(response => response.text()).
+			await	fetch(browser.runtime.getURL('resources/concat.bat')).then(response => response.text()).
 						then(text => prgFolder.file('concat.bat', text));
 			
 			i = -1, concat = '';
@@ -348,102 +357,16 @@ class RadicoFetch extends AbortableFetch {
 			
 		}
 		
-		return;
-		
-		if (details.method === 'GET') {
-			
-			const url = new URL(details.url), { pathname, searchParams } = url;
-			
-			if (
-				RadicoFetch.rxUrlPathname.test(pathname) &&
-				searchParams.has('end_at') &&
-				searchParams.has('l') &&
-				searchParams.has('seek') &&
-				searchParams.has('start_at')
-			) {
-				
-				const	{ uids } = this, _uid_ = searchParams.get('_uid_');
-				
-				if (uids[_uid_]) {
-					
-					delete uids[_uid_];
-					return;
-					
-				} else {
-					
-					const	{ maxChunkLength, composeURL, getDate, getDateStr, responsedStreamText, rxM3U8Url } = RadicoFetch,
-							{ requestHeaders } = details,
-							{ uids } = this,
-							_uid_ = searchParams.get('_uid_'),
-							startAt = searchParams.get('start_at'),
-							startTime = getDate(startAt).getTime(),
-							endAt = searchParams.get('end_at'),
-							totalLength = parseInt((getDate(endAt).getTime() - startTime) / 1000),
-							requestLength = parseInt(totalLength / maxChunkLength),
-							headers = {},
-							dlUrls = [];
-					let i, chunk, length, seek;
-					
-					for (const { name, value } of requestHeaders) headers[name] = value;
-					
-					this.log(details, headers, composeURL(url) + '?' + searchParams);
-					
-					i = -1;
-					while (++i < requestLength) {
-						
-						length = (chunk = totalLength - i * maxChunkLength) < maxChunkLength ? chunk : maxChunkLength,
-						seek = getDateStr(startTime + (i ? (i - 1) * maxChunkLength + chunk : 0) * 1000);
-						
-						if (!length) break;
-						
-						searchParams.set('l', length);
-						searchParams.set('seek', seek),
-						this.log(i, totalLength - i * maxChunkLength, searchParams.get('l'), searchParams.get('seek'), endAt);
-						await	this.getURLsFromM3U8(composeURL(url) + '?' + searchParams, { headers }).
-									then(urls => this.getURLsFromM3U8(urls[0])).then(urls => dlUrls.push(...urls));
-						
-					}
-					
-					const { downloads } = browser, dlOption = { saveAs: true }, dlUrlsLength = dlUrls.length;
-					let dlUrl, pathname;
-					
-					this.log(dlUrls);
-					
-					i = -1;
-					while (++i < 3) {
-						
-						dlOption.filename =
-							(pathname = new URL(dlUrl = dlUrls[i]).pathname).substring(pathname.lastIndexOf('/') + 1),
-						
-						await fetch(dlUrl).then(response => response.blob()).
-							then(blob => (dlOption.url = URL.createObjectURL(blob), downloads.download(dlOption)));
-						
-					}
-					this.log(2);
-				}
-				
-			}
-			
-		}
-		
 	}
 	
-	getURLsFromM3U8(urlStr, option) {
-		
-		const { getURLsFromM3U8, responsedStreamText } = RadicoFetch;
-		
-		return this.uniqueFetch(urlStr, option).then(responsedStreamText).then(getURLsFromM3U8);
-		
-	}
-	
-	uniqueFetch(url, option, uid = Math.random() + '-' + Date.now()) {
-		
-		const search = new URL(url).searchParams;
-		
-		search.append('_uid_', this.uids[uid] = uid);
-		
-		return this.fetch(RadicoFetch.composeURL(url) + '?' + search, option);
-		
-	}
+	//uniqueFetch(url, option, uid = crypto.randomUUID()) {
+	//	
+	//	const search = new URL(url).searchParams;
+	//	
+	//	search.append('_uid_', this.uids[uid] = uid);
+	//	
+	//	return this.fetch(RadicoFetch.composeURL(url) + '?' + search, option);
+	//	
+	//}
 	
 }

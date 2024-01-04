@@ -14,11 +14,13 @@ class Content extends WXLogger {
 	
 	static onMessage(message, sender, sendResponse) {
 		
-		this.log(message, sender);
+		const { log } = this;
+		
+		log("Received a message.", message, sender);
 		
 		if (message && typeof message === 'object') {
 			
-			const { ft, log, stationId } = this;
+			const { ft, stationId } = this;
 			
 			switch (message.type) {
 				
@@ -40,7 +42,7 @@ class Content extends WXLogger {
 				
 				const { session } = this;
 				
-				log(session),
+				log("Making inquire a tabId.", session),
 				
 				message.tabId === session?.tabId && browser.runtime.sendMessage({ session, type: 'identified' });
 				
@@ -62,19 +64,19 @@ class Content extends WXLogger {
 		
 		super();
 		
-		const { pathRx } = Content, path = pathRx.exec(url);
+		const pathParts = Content.pathRx.exec(url);
 		
-		if (path) {
+		if (pathParts) {
 			
 			const { runtime } = browser, { onMessage, hidPage } = Content;
 			
-			this.stationId = path[1],
-			this.ft = path[2],
+			this.stationId = pathParts[1],
+			this.ft = pathParts[2],
 			
 			addEventListener('pagehide', this.hidPage = hidPage.bind(this)),
 			runtime.onMessage.addListener(this.onMessage = onMessage.bind(this)),
 			
-			runtime.sendMessage(this.uid = Date.now() + '-' + Math.random());
+			runtime.sendMessage(this.uid = crypto.randomUUID());
 			
 		}
 		

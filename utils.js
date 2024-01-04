@@ -1,5 +1,4 @@
-const
-hi = console.log.bind(console, '📍');
+const hi = console.log.bind(console, '📍');
 
 // 同一の記述子であることが期待される Object を列挙した Array を自身にコピーし
 // 任意のプロパティ名とその値をペアとして、その値を取り出す仕組みを提供する。

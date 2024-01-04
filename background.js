@@ -1,9 +1,11 @@
-// 現在は視聴開始後のリクエストを傍聴してプレイリストを要求しているが、
-// ページを読み込んだ段階で行なわれる auth1 への応答ヘッダーに含まれる x-radiko-authtoken を使えば恐らく任意のタイミングでプレイリストを要求できる。
-
 class Background extends WXLogger {
 	
 	static {
+		
+		this.icon = {
+			downloadable: null,
+			requesting: 'resources/23F3.svg'
+		},
 		
 		this[WXLogger.$namePrefix] = '@',
 		this[WXLogger.$nameSuffix] = '',
@@ -13,28 +15,28 @@ class Background extends WXLogger {
 	
 	static interactedPageAction(event) {
 		
-		this.log(event),
+		const { log, requesting } = this, { id: tabId } = event;
 		
-		browser.tabs.sendMessage(event.id, { type: 'identify', tabId: event.id });
+		tabId in requesting ||
+			(log('"Interacted page action."', event), browser.tabs.sendMessage(tabId, { type: 'identify', tabId }));
 		
 	}
 	
 	static messageFromContent(message, sender, sendResponse) {
 		
-		const { pageAction, tabs } = browser, { log, rss } = this;
+		const { pageAction, tabs } = browser, { log, radicoSession } = this, { tab: { id: tabId } } = sender;
 		
-		log(message, sender);
+		log('"Received a message."', message, sender);
 		
 		switch (typeof message) {
 			
 			case 'boolean':
-			message || (rss[sender.tab.id]?.abort(), delete rss[sender.tab.id]);
+			message || (radicoSession[tabId]?.abort(), delete radicoSession[tabId]);
 			break;
 			
 			case 'string':
-			const tabId = sender.tab.id;
 			//todo Radikoのauth2が取得できないなど、例外に遭遇した場合の停止処理やタイムアウト処理
-			(rss[tabId] = new RadicoSession(tabId)).session.
+			(radicoSession[tabId] = new RadicoSession(tabId)).session.
 				then(session => tabs.sendMessage(tabId, { session, tabId, type: 'received', uid: message }).
 					then(() => pageAction.show(tabId)));
 			break;
@@ -45,7 +47,19 @@ class Background extends WXLogger {
 				switch (message.type) {
 					
 					case 'identified':
-					log(message), new RadicoFetch().request(message.session);
+					const	{ icon: { downloadable, requesting } } = Background,
+							{ requesting: req } = this,
+							iconDetails = { tabId: tabId };
+					
+					req[tabId] = true,
+					iconDetails.path = requesting,
+					pageAction.setIcon(iconDetails),
+					
+					new RadicoFetch().request(message.session).
+						then(() => (iconDetails.path = downloadable, pageAction.setIcon(iconDetails), delete req[tabId])),
+					
+					log('"Tried a request."', message);
+					
 					break;
 					
 				}
@@ -63,12 +77,13 @@ class Background extends WXLogger {
 		
 		const { pageAction, runtime } = browser, { interactedPageAction, messageFromContent } = Background;
 		
-		this.rss = {},
+		this.radicoSession = {},
+		this.requesting = {},
 		
 		pageAction.onClicked.addListener(this.interactedPageAction = interactedPageAction.bind(this)),
 		runtime.onMessage.addListener(this.messageFromContent = messageFromContent.bind(this)),
 		
-		this.log(Date.now());
+		this.log(new Date().toString());
 		
 	}
 	

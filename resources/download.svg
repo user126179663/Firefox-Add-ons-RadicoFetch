@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="512"
+   height="512"
+   viewBox="0 0 512 512"
+   version="1.1"
+   id="svg5"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:cc="http://creativecommons.org/ns#">
+  <defs
+     id="defs2" />
+  <g
+     id="layer1">
+    <path
+       id="rect234"
+       style="fill:#e73c64;stroke-width:6.00066;stroke-miterlimit:18.8;paint-order:fill markers stroke;fill-opacity:1"
+       d="M 256 57.826172 C 242.31818 57.826172 231.30273 68.839668 231.30273 82.521484 L 231.30273 287.33203 L 168.41211 224.44141 C 158.7376 214.7669 143.16083 214.7669 133.48633 224.44141 C 123.81182 234.11591 123.81182 249.69268 133.48633 259.36719 L 239.11719 364.99805 C 243.95994 369.8408 250.28151 372.25746 256.60156 372.25195 C 262.92228 372.25796 269.24464 369.8413 274.08789 364.99805 L 379.71875 259.36719 C 389.39326 249.69268 389.39325 234.11591 379.71875 224.44141 C 370.04425 214.7669 354.46552 214.7669 344.79102 224.44141 L 280.69727 288.53711 L 280.69727 82.521484 C 280.69727 68.839668 269.68182 57.826172 256 57.826172 z M 80.113281 404.14648 C 66.43145 404.14648 55.416016 415.15997 55.416016 428.8418 C 55.416016 442.52363 66.43145 453.53906 80.113281 453.53906 L 431.88672 453.53906 C 445.56855 453.53906 456.58398 442.52363 456.58398 428.8418 C 456.58398 415.15997 445.56855 404.14648 431.88672 404.14648 L 80.113281 404.14648 z " />
+  </g>
+  <metadata
+     id="metadata993">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <cc:license
+           rdf:resource="http://creativecommons.org/publicdomain/zero/1.0/" />
+      </cc:Work>
+      <cc:License
+         rdf:about="http://creativecommons.org/publicdomain/zero/1.0/">
+        <cc:permits
+           rdf:resource="http://creativecommons.org/ns#Reproduction" />
+        <cc:permits
+           rdf:resource="http://creativecommons.org/ns#Distribution" />
+        <cc:permits
+           rdf:resource="http://creativecommons.org/ns#DerivativeWorks" />
+      </cc:License>
+    </rdf:RDF>
+  </metadata>
+</svg>

@@ -23,8 +23,8 @@
 	
 	"page_action": {
 		
-		"default_icon": "icon.png",
-		"default_title": "Copy"
+		"default_icon": "resources/download.svg",
+		"default_title": "Download"
 		//"show_matches": [ "*://radiko.jp/*" ]
 		
 	},
