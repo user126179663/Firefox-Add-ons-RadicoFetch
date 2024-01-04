@@ -4,7 +4,7 @@ class AbortableFetch extends WXLogger {
 		
 		this.$ac = Symbol('AbortableFetch.ac'),
 		
-		this[Logger.$nameBody] = '🚨-📥';
+		this[Logger.$name] = '🚨-📥';
 		
 	}
 	
@@ -51,20 +51,7 @@ class RadicoSession extends WXLogger {
 		this.reqExtraInfoSpec = [ 'requestHeaders' ],
 		this.resExtraInfoSpec = [ 'responseHeaders' ],
 		
-		this[Logger.$nameBody] = '📻-📡';
-		
-	}
-	
-	// 未使用
-	static convertEntriesToArray(entries) {
-		
-		const array = [];
-		let i;
-		
-		i = -1;
-		for (const v of entries) array[++i] = { ...v };
-		
-		return array;
+		this[Logger.$name] = '📻-📡';
 		
 	}
 	
@@ -135,7 +122,7 @@ class RadicoFetch extends AbortableFetch {
 		this.dlOption = { saveAs: true },
 		this.metaBlobOption = { type: 'application/json' },
 		
-		this[Logger.$nameBody] = '📻-📥';
+		this[Logger.$name] = '📻-📥';
 		
 	}
 	
@@ -214,86 +201,6 @@ class RadicoFetch extends AbortableFetch {
 		return text;
 		
 	}
-	
-	//static async _listener(details) {
-	//	
-	//	if (details.method === 'GET') {
-	//		
-	//		const url = new URL(details.url), { pathname, searchParams } = url;
-	//		
-	//		if (
-	//			RadicoFetch.rxUrlPathname.test(pathname) &&
-	//			searchParams.has('end_at') &&
-	//			searchParams.has('l') &&
-	//			searchParams.has('seek') &&
-	//			searchParams.has('start_at')
-	//		) {
-	//			
-	//			const	{ uids } = this, _uid_ = searchParams.get('_uid_');
-	//			
-	//			if (uids[_uid_]) {
-	//				
-	//				delete uids[_uid_];
-	//				return;
-	//				
-	//			} else {
-	//				
-	//				const	{ maxChunkLength, composeURL, getDate, getDateStr, responsedStreamText, rxM3U8Url } = RadicoFetch,
-	//						{ requestHeaders } = details,
-	//						{ uids } = this,
-	//						_uid_ = searchParams.get('_uid_'),
-	//						startAt = searchParams.get('start_at'),
-	//						startTime = getDate(startAt).getTime(),
-	//						endAt = searchParams.get('end_at'),
-	//						totalLength = parseInt((getDate(endAt).getTime() - startTime) / 1000),
-	//						requestLength = parseInt(totalLength / maxChunkLength),
-	//						headers = {},
-	//						dlUrls = [];
-	//				let i, chunk, length, seek;
-	//				
-	//				for (const { name, value } of requestHeaders) headers[name] = value;
-	//				
-	//				hi(details, headers, composeURL(url) + '?' + searchParams);
-	//				
-	//				i = -1;
-	//				while (++i < requestLength) {
-	//					
-	//					length = (chunk = totalLength - i * maxChunkLength) < maxChunkLength ? chunk : maxChunkLength,
-	//					seek = getDateStr(startTime + (i ? (i - 1) * maxChunkLength + chunk : 0) * 1000);
-	//					
-	//					if (!length) break;
-	//					
-	//					searchParams.set('l', length);
-	//					searchParams.set('seek', seek),
-	//					hi(i, totalLength - i * maxChunkLength, searchParams.get('l'), searchParams.get('seek'), endAt);
-	//					await	this.getURLsFromM3U8(composeURL(url) + '?' + searchParams, { headers }).
-	//								then(urls => this.getURLsFromM3U8(urls[0])).then(urls => dlUrls.push(...urls));
-	//					
-	//				}
-	//				
-	//				const { downloads } = browser, dlOption = { saveAs: true }, dlUrlsLength = dlUrls.length;
-	//				let dlUrl, pathname;
-	//				
-	//				hi(dlUrls);
-	//				
-	//				i = -1;
-	//				while (++i < 3) {
-	//					
-	//					dlOption.filename =
-	//						(pathname = new URL(dlUrl = dlUrls[i]).pathname).substring(pathname.lastIndexOf('/') + 1),
-	//					
-	//					await fetch(dlUrl).then(response => response.blob()).
-	//						then(blob => (dlOption.url = URL.createObjectURL(blob), downloads.download(dlOption)));
-	//					
-	//				}
-	//				
-	//			}
-	//			
-	//		}
-	//		
-	//	}
-	//	
-	//}
 	
 	static DOMToObject(dom) {
 		
@@ -438,20 +345,6 @@ class RadicoFetch extends AbortableFetch {
 			
 			await	zip.generateAsync({ type: 'base64' }).
 						then(base64 => (location.href = 'data:application/zip;base64,' + base64));
-			
-			//await downloads.download({ filename: prgFileName + '.json', url: createObjectURL(new Blob([ JSON.stringify(DOMToObject(prg), null, '\t') ], metaBlobOption)) }),
-			//prgCoverURL && await downloads.download({ filename: prgCoverFileName, url: prgCoverURL });
-			//
-			//i = -1;
-			//while (++i < dlUrlsLength) {
-			//	
-			//	dlOption.filename =
-			//		(pathname = new URL(dlUrl = dlUrls[i]).pathname).substring(pathname.lastIndexOf('/') + 1),
-			//	hi(dlUrl, dlOption.filename);
-			//	await this.fetch(dlUrl).then(response => response.blob()).
-			//		then(blob => (dlOption.url = createObjectURL(blob), downloads.download(dlOption)));
-			//	
-			//}
 			
 		}
 		
