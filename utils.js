@@ -155,10 +155,31 @@ class KV extends Array {
 // const descriptor = { value: new Mirror(doSomething, something, [ 0, 1, 2 ]) };
 // ...
 // const definedValue = descriptor.value instanceof Mirror ? descriptor.value.reflect() : descriptor.value;
+// // or: const definedValue = Mirror.isMirror(descriptor.value) ? descriptor.value.reflect() : descriptor.value;
 // bind と少し似ているが、bind は実行時に関数の各種実行コンテキストを動的に変化させられないため柔軟性に欠ける。
 class Mirror {
 	
-	constructor(target, thisArgument, ...argumentsList) {
+	static {
+		
+		this.$target = Symbol('Mirror.target'),
+		this.$thisArgument = Symbol('Mirror.thisArgument'),
+		this.$argumentsList = Symbol('Mirror.argumentsList');
+		
+	}
+	
+	static isMirror(target) {
+		
+		return target?.__proto__ === Mirror.prototype;
+		
+	}
+	
+	constructor() {
+		
+		this.set(...arguments);
+		
+	}
+	
+	set(target, thisArgument, argumentsList) {
 		
 		this.target = target,
 		this.thisArgument = thisArgument,
@@ -168,157 +189,548 @@ class Mirror {
 	
 	// 引数に与えられたプロパティを優先して使い Reflet.apply() を実行する。
 	// 引数が与えられない時はインスタンスの、対応するプロパティで代替して実行する。
-	reflect(target = this.target, thisArgument = this.thisArgument, ...argumentsList) {
+	reflect(target = this.target, thisArgument = this.thisArgument, argumentsList, ...args) {
 		
 		argumentsList.length || (argumentsList = this.argumentsList);
 		
-		return Reflect.apply(target, thisArgument, argumentsList);
+		return Reflect.apply(target, thisArgument, [ ...args, ...argumentsList ]);
 		
 	}
 	
 	// このメソッドに与えられた引数よりも、インスタンスのプロパティに設定された値を優先して Reflect.apply() を実行する。
 	// 引数に対応するインスタンスのプロパティに値が設定されていなければ、引数の値を使って Reflect.apply() を行なう。
 	// そうでなければ引数の指定を無視してインスタンスのプロパティを使って Reflect.apply() を実行する。
-	weakReflect(target, thisArgument, ...argumentsList) {
+	weakReflect(target, thisArgument, argumentsList, ...args) {
 		
 		const { target: t = target, thisArgument: ta = thisArgument, argumentsList: al = argumentsList } = this;
 		
-		return Reflect.apply(t, ta, al);
+		return Reflect.apply(t, ta, [ ...args, ...al ]);
+		
+	}
+	
+	get target() {
+		
+		const v = this[Mirror.$target];
+		
+		return typeof v === 'function' ? v : null;
+		
+	}
+	set target(v) {
+		
+		this[Mirror.$target] = typeof v === 'function' ? v : null;
+		
+	}
+	get thisArgument() {
+		
+		return this[Mirror.$thisArgument];
+		
+	}
+	set thisArgument(v) {
+		
+		this[Mirror.$thisArgument] = v;
+		
+	}
+	get argumentsList() {
+		
+		const v = this[Mirror.$argumentsList];
+		
+		return Array.isArray(v) ? v : [ v ];
+		
+	}
+	set argumentsList(v) {
+		
+		v === undefined || (this[Mirror.$argumentsList] = Array.isArray(v) ? v : [ v ]);
 		
 	}
 	
 }
-class Logger {
+//class JointStr extends Array {
+//	
+//	constructor(option) {
+//		
+//		(option && typeof option === 'object' && !Array.isArray(option)) || (option = { elements: option }),
+//		Array.isArray(option.elements) || (option.elements = [ option.elements ]),
+//		
+//		super(...option.elements);
+//		
+//		this.setFallbacks(option.fallbacks);
+//		
+//	}
+//	
+//	*[Symbol.iterator]() {
+//		
+//		const length = this.length;
+//		let i;
+//		
+//		i = -1;
+//		while (++i < l) yield this[i];
+//		
+//	}
+//	
+//	setFallbacks(kv) {
+//		
+//		this.fallbacks = kv instanceof KV ? kv : Array.isArray(kv) ? new KV(kv, 'pattern', 'value') : null;
+//		
+//	}
+//	
+//	toString(target, thisArgument, argumentsList) {
+//		
+//		const { fallbacks } = this;
+//		let str;
+//		
+//		str = '';
+//		for (const v of this) str += v instanceof Mirror ? v.weakReflect(target, thisArgument, argumentsList) : v;
+//		
+//		if (fallbacks instanceof KV) for (const { k, v } of fallbacks) str = str.replace(k, v);
+//		
+//		return str;
+//		
+//	}
+//	
+//}
+class Binder {
+	
+	static *[Symbol.iterator]() {
+		
+		for (const prototype of Binder.getPrototypes(this)) yield prototype;
+		
+	}
+	
+	static getPrototypes(constructor = this) {
+		
+		const { getPrototypeOf } = Object, prototypes = [];
+		let i;
+		
+		prototypes[i = 0] = constructor.prototype ? constructor : constructor.constructor;
+		while (constructor = getPrototypeOf(constructor)) prototypes[++i] = constructor;
+		
+		return prototypes.reverse();
+		
+	}
+	
+	static getBound(target, thisArgument) {
+		
+		if (target && typeof target === 'object') {
+			
+			const { isArray } = Array, keys = Binder.ownKeys(target), keysLength = keys.length, bound = {};
+			let i, k,v, thisArgument0, argumentsList;
+			
+			i = -1;
+			while (++i < keysLength) {
+				
+				(v = target[k = keys[i]]) && typeof v === 'object' ?
+					(thisArgument0 = v.thisArgument, argumentsList = v.argumentsList, v = v.target) :
+					(thisArgument0 = thisArgument, argumentsList = undefined),
+				
+				typeof v === 'function' &&
+					(
+						bound[k] = isArray(argumentsList) ?	v.bind(thisArgument0, ...argumentsList) :
+																		v.bind(thisArgument0)
+					); 
+				
+			}
+			
+			return bound;
+			
+		}
+		
+	}
+	
+	static merge(constructor, propertyName) {
+		
+		if (Binder.isPrototypeOf(constructor)) {
+			
+			const { assign } = Object, merged = {};
+			let v;
+			
+			for (const prototype of constructor)
+				(v = prototype[propertyName]) && typeof v === 'object' && assign(merged, v);
+			
+			return merged;
+			
+		}
+		
+	}
+	
+	static ownKeys(object) {
+		
+		const { getOwnPropertySymbols, keys } = Object;
+		
+		return object && typeof object === 'object' ? [ ...getOwnPropertySymbols(object), ...keys(object) ] : [];
+		
+	}
+	
+	constructor() {}
+	
+	getBound(target) {
+		
+		return this.constructor.getBound(target, this);
+		
+	}
+	
+}
+class Logger extends Binder {
 	
 	static {
 		
 		this.$args = Symbol('Logger.args'),
-		this.$info = Symbol('Logger.info'),
-		this.$log = Symbol('Logger.log'),
+		this.$avoids = Symbol('Logger.avoids'),
+		this.$default = Symbol('Logger.default'),
+		this.$defaultLoggerArgs = Symbol('Logger.defaultLoggerArgs'),
+		this.$icon = Symbol('Logger.icon'),
+		this.$id = Symbol('Logger.id'),
+		this.$idPrefix = Symbol('Logger.idPrefix'),
+		this.$idSuffix = Symbol('Logger.idSuffix'),
+		this.$label = Symbol('Logger.label'),
+		this.$logger = Symbol('Logger.logger'),
 		this.$name = Symbol('Logger.name'),
 		this.$namePrefix = Symbol('Logger.namePrefix'),
 		this.$nameSuffix = Symbol('Logger.nameSuffix'),
-		this.$warn = Symbol('Logger.warn');
+		this.$replacer = Symbol('Logger.replacer'),
+		
+		//this[this.$defaultLoggerArgs] = [ this.$label ],
+		
+		this[this.$defaultLoggerArgs] = [ this.$icon, this.$label ],
+		
+		//this[this.$args] = [
+		//	
+		//	{ target: this.$label, value: new Mirror(this.prototype.getReplacedLoggerValue) }
+		//	
+		//],
+		
+		this[this.$namePrefix] = this[this.$nameSuffix] = '',
+		this[this.$name] = '✍',
+		
+		this[this.$idPrefix] = '🏷️',
+		
+		this[this.$label] = [ this.$namePrefix, this.$name, this.$id, this.$nameSuffix ],
+		
+		this[this.$replacer] = {
+			
+			[this.$icon](key) {
+				
+				return this.loggerIcon || Logger.$avoids;
+				
+			},
+			
+			[this.$id](key) {
+				
+				let id;
+				
+				if ((id = this.loggerId) !== undefined) {
+					
+					const { $idPrefix, $idSuffix } = Logger;
+					
+					id = this.getReplacedLoggerValue([ $idPrefix, id, $idSuffix ])
+					
+				}
+				
+				return id === undefined ? Logger.$avoids : id;
+				
+			},
+			
+			[this.$label](key) {
+				
+				return this.getReplacedLoggerValue(this.constructor[Logger.$label]);
+				
+			},
+			
+			[this.$default](key) {
+				
+				const v = (typeof key === 'symbol' ? this.getLoggerStrFrom(key) : key) ?? Logger.$avoids;
+				
+				return v instanceof Mirror ?	v.weakReflect(undefined, this, [ key ]) :
+														typeof v === 'function' ? v.call(this, key) : v;
+				
+			}
+			
+		},
+		
+		this[this.$logger] = {
+			
+			dir: { args: this[this.$defaultLoggerArgs], methodName: 'dir' },
+			info: { args: this[this.$defaultLoggerArgs], methodName: 'info' },
+			log: { args: this[this.$defaultLoggerArgs], methodName: 'log' },
+			trace: { args: this[this.$defaultLoggerArgs], methodName: 'trace' },
+			warn: { args: this[this.$defaultLoggerArgs], methodName: 'warn' }
+			
+		};
 		
 	}
 	
-	static *[Symbol.iterator]() {
-		
-		const { getPrototypeOf } = Object;
-		let constructor;
-		
-		yield (constructor = this);
-		
-		while (constructor = getPrototypeOf(constructor)) yield constructor;
-		
-	}
-	
-	static getConsole(method, ...args) {
+	static bindLogger(method, ...args) {
 		
 		return (typeof (method = console[method]) === 'function' ? method : console.log).bind(console, ...args);
 		
 	}
 	
-	static getLogName() {
+	static getLogger(constructor = this) {
 		
-		const { $name, $namePrefix, $nameSuffix } = Logger;
-		
-		return this[$namePrefix] + this[$name] + this[$nameSuffix];
+		return Binder.merge(constructor, Logger.$logger);
 		
 	}
 	
-	constructor() {
+	static getReplacedLoggerValue(values, replacer) {
 		
-		const { $info, $log, $warn, getConsole } = Logger;
-		
-		this.info = getConsole('info', ...this.getLogArgs($info)),
-		this.log = getConsole('log', ...this.getLogArgs($log)),
-		this.warn = getConsole('warn', ...this.getLogArgs($warn));
+		return Logger.replaceLoggerValues(values, replacer)?.join?.('') ?? '';
 		
 	}
 	
-	getLogName() {
-		
-		const { $name, $namePrefix, $nameSuffix } = Logger, { constructor } = this;
-		
-		return constructor[$namePrefix] + constructor[$name] + constructor[$nameSuffix];
-		
-	}
+	//static getLogArgs(constructor = this, args, weakMirrorArgs = [ undefined, this ]) {
+	//	
+	//	const { iterator } = Symbol, { $args, replaceLogValue } = Logger;
+	//	let kv;
+	//	
+	//	for (const prototype of constructor) {
+	//		
+	//		if (typeof (kv = prototype[$args])?.[iterator] === 'function') {
+	//			
+	//			for (const { target, value } of kv)
+	//				args = replaceLogValue(prototype, args, target, value, weakMirrorArgs) ?? args;
+	//			hi(prototype,args);
+	//		}
+	//		
+	//	}
+	//	
+	//	return args;
+	//	
+	//}
 	
-	getLogArgs(args) {
+	//static getLogLabel() {
+	//	
+	//	const { $name, $namePrefix, $nameSuffix } = Logger;
+	//	
+	//	return this[$namePrefix] + this[$name] + this[$nameSuffix];
+	//	
+	//}
+	
+	static replaceLoggerValues(values, replacer) {
 		
-		const { $args } = Logger;
-		let kv;
-		
-		for (const constructor of this.constructor) {
+		if (Array.isArray(values) && replacer && typeof replacer === 'object') {
 			
-			if ((kv = constructor[$args]) instanceof Array) {
-				
-				for (const { target, value } of kv) args = this.replaceLogValue(args, target, value) ?? args;
-				
-			}
+			const	{ $avoids } = Logger,
+					valuesLength = values.length,
+					defaultLabeler = replacer[Logger.$default],
+					replaced = [];
+			let i,i0, k, v;
+			
+			i = i0 = -1;
+			while (++i < valuesLength)
+				(v = typeof (v = replacer[k = values[i]] ?? defaultLabeler) === 'function' ? v(k) : v) === $avoids ||
+					(replaced[i] = v);
+			
+			return replaced;
 			
 		}
 		
-		return args;
+	}
+	
+	//static replaceLogValue(constructor, args, target, value, weakMirrorArgs) {
+	//	
+	//	if	(
+	//			Array.isArray
+	//				(typeof args === 'symbol' && Object.hasOwn(constructor, args) ? (args = constructor[args]) : args)
+	//		)
+	//	{
+	//		
+	//		let i;
+	//		
+	//		i = -1, args = [ ...args ];
+	//		while ((i = args.indexOf(target, i + 1)) !== -1)
+	//			args[i] = value instanceof Mirror ? value.weakReflect.apply(value, weakMirrorArgs) : value;
+	//		
+	//		return args;
+	//		
+	//	}
+	//	
+	//}
+	
+	constructor(id) {
+		
+		super();
+		
+		const { $replacer } = Logger;
+		
+		Object.assign(this[$replacer] = {}, this.getBound(Binder.merge(this.constructor, Logger.$replacer))),
+		
+		this.update(id);
 		
 	}
 	
-	replaceLogValue(args, target, value) {
+	*[Symbol.iterator]() {
 		
-		if (Array.isArray(typeof args === 'symbol' ? (args = this.constructor[args]) : args)) {
-			
-			let i;
-			
-			i = -1, args = [ ...args ];
-			while ((i = args.indexOf(target, i + 1)) !== -1)
-				args[i] = typeof value === 'function' ?
-					value.call(this) : value instanceof Mirror ? value.weakReflect(undefined, this) : value;
-			
-			return args;
-			
-		}
+		for (const k in this.constructor.getLogger()) yield { logger: this[k], name: k };
+		
+	}
+	
+	bindLogger(methodName, args) {
+		
+		const { bindLogger } = Logger;
+		
+		return Logger.bindLogger(methodName, ...this.replaceLoggerValues(args));
+		
+	}
+	
+	getLoggerStrFrom(propertyName) {
+		
+		const v = this[propertyName] ?? this.constructor[propertyName];
+		
+		return v === undefined ? undefined : '' + v;
+		
+	}
+	
+	getReplacedLoggerValue(values) {
+		
+		const { $replacer, getReplacedLoggerValue } = Logger;
+		
+		return getReplacedLoggerValue(values, this[$replacer]);
+		
+	}
+	
+	replaceLoggerValues(values) {
+		
+		const { $replacer, replaceLoggerValues } = Logger;
+		
+		return replaceLoggerValues(values, this[$replacer]);
+		
+	}
+	
+	update(id, ...targets) {
+		
+		const logger = this.constructor.getLogger(), targetsLength = targets.length;
+		let k,v;
+		
+		this.loggerId = id;
+		
+		targetsLength && (Array.isArray(targets) || (targets = [ targets ]));
+		for (k in logger)	(!targetsLength || targets.indexOf(k) !== -1) &&
+									(this[k] = this.bindLogger((v = logger[k]).methodName, v.args));
+		
+	}
+	
+	//getLogArgs(args) {
+	//	
+	//	const { $args } = Logger;
+	//	let kv;
+	//	
+	//	for (const prototype of this.constructor) {
+	//		
+	//		//coco constructor[$args] を merge する？ merge する場合、同値を KV にしてそのメソッドを使う必要があると思われる。
+	//		// $args は実際のコンソールの各メソッドに渡される引数を想定した記述子
+	//		if ((kv = prototype[$args]) instanceof Array) {
+	//			
+	//			for (const { target, value } of kv) args = this.replaceLogValue(args, target, value) ?? args;
+	//			
+	//		}
+	//		
+	//	}
+	//	
+	//	return args;
+	//	
+	//}
+	//
+	//replaceLogValue(args, target, value) {
+	//	
+	//	if (Array.isArray(args)) {
+	//		
+	//		const replaced = [];
+	//		let i;
+	//		
+	//		i = -1;
+	//		while ((i = args.indexOf(target, i + 1)) !== -1)
+	//			replaced[i] = value instanceof Mirror ? value.weakReflect(undefined, this) : value;
+	//		
+	//		return replaced;
+	//		
+	//	}
+	//	
+	//}
+	
+	get loggerIcon() {
+		
+		return this.getLoggerStrFrom(Logger.$icon);
+		
+	}
+	set loggerIcon(v) {
+		
+		this[Logger.$icon] = v;
+		
+	}
+	get loggerId() {
+		
+		return this.getLoggerStrFrom(Logger.$id);
+		
+	}
+	set loggerId(v) {
+		
+		this[Logger.$id] = v;
+		
+	}
+	get loggerIdPrefix() {
+		
+		return this.getLoggerStrFrom(Logger.$idPrefix);
+		
+	}
+	set loggerIdPrefix(id) {
+		
+		this[Logger.$idPrefix] = v;
+		
+	}
+	get loggerIdSuffix() {
+		
+		return this.getLoggerStrFrom(Logger.$idSuffix);
+		
+	}
+	set loggerIdSuffix(id) {
+		
+		this[Logger.$idSuffix] = v;
+		
+	}
+	get loggerName() {
+		
+		return this.getLoggerStrFrom(Logger.$name);
+		
+	}
+	set loggerName(id) {
+		
+		this[Logger.$name] = v;
+		
+	}
+	get loggerNamePrefix() {
+		
+		return this.getLoggerStrFrom(Logger.$namePrefix);
+		
+	}
+	set loggerNamePrefix(id) {
+		
+		this[Logger.$namePrefix] = v;
+		
+	}
+	get loggerNameSuffix() {
+		
+		return this.getLoggerStrFrom(Logger.$nameSuffix);
+		
+	}
+	set loggerNameSuffix(id) {
+		
+		this[Logger.$nameSuffix] = v;
 		
 	}
 	
 }
-Logger[Logger.$args] = [
-	{ target: Logger.$name, value: new Mirror(Logger.prototype.getLogName) }
-],
-Logger[Logger.$namePrefix] = '/',
-Logger[Logger.$nameSuffix] = Logger[Logger.$namePrefix],
-Logger[Logger.$name] = 'LOGGER',
-Logger[Logger.$info] = Logger[Logger.$log] = Logger[Logger.$warn] = [ Logger.$name ];
 
 class WXLogger extends Logger {
 	
 	static {
 		
-		this.$icon = Symbol('WXLogger.icon'),
-		this.$logPad = Symbol('WXLogger.logPad'),
+		this[Logger.$namePrefix] = '[',
+		this[Logger.$nameSuffix] = ']',
+		this[Logger.$name] = 'WX',
 		
-		this[Logger.$namePrefix] = '<',
-		this[Logger.$nameSuffix] = '>',
-		this[Logger.$name] = 'WX';
-		
-	}
-	
-	constructor() {
-		
-		super();
+		this[Logger.$icon] = '󠁪󠁪󠁪󠀽🧩';
 		
 	}
 	
-	getWXLogIcon() {
-		
-		return this.constructor[WXLogger.$icon];
-		
-	}
+	constructor() { super(...arguments); }
 	
 }
-WXLogger[Logger.$args] = [
-	{ target: WXLogger.$icon, value: new Mirror(WXLogger.prototype.getWXLogIcon) }
-],
-WXLogger[WXLogger.$icon] = '󠁪󠁪󠁪󠀽🧩',
-WXLogger[WXLogger.$logPad] = '󠁪󠁪󠁪󠀽▫️',
-WXLogger[Logger.$info] = WXLogger[Logger.$log] = WXLogger[Logger.$warn] = [ WXLogger.$icon, Logger.$name ];

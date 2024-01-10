@@ -6,68 +6,78 @@ class Content extends WXLogger {
 		
 		this.pathRx = /\/#!\/ts\/(.*?)\/(\d{14})(?:$|\/|\?)/,
 		
-		this[WXLogger.$namePrefix] = '@',
-		this[WXLogger.$name] = 'Page',
-		this[WXLogger.$nameSuffix] = '';
+		this[Logger.$name] = 'Page',
+		this[Logger.$namePrefix] = '@',
+		this[Logger.$nameSuffix] = '';
 		
 	}
 	
-	static onMessage(message, sender, sendResponse) {
+	static bound = {
 		
-		const { log } = this;
-		
-		log('"Received a message."', message, sender);
-		
-		if (message && typeof message === 'object') {
+		hidPage() {
 			
-			const { ft, stationId } = this;
+			this.log('"A tab was hidden."'),
 			
-			switch (message.type) {
+			browser.runtime.sendMessage(false);
+			
+		},
+		
+		onMessage(message, sender, sendResponse) {
+			
+			const { log } = this;
+			
+			log('"Received a message."', message, sender);
+			
+			if (message && typeof message === 'object') {
 				
-				case 'identify':
+				const { ft, messenger, stationId, storedSession } = this, { tabId, type } = message;
 				
-				const { session } = this;
-				
-				log('"Making inquire a tabId."', session),
-				
-				message.tabId === session?.tabId && browser.runtime.sendMessage({ session, type: 'identified' });
-				
-				break;
-				
-				case 'received':
-				if (message.uid === this.uid) {
-					
-					const { session } = message;
-					
-					(this.session = session).stationId = stationId,
-					session.tabId = message.tabId,
-					session.ft = ft,
-					session.cookie = document.cookie,
-					
-					log('"Responsed a session data."', session),
-					
-					sendResponse();
-					
-				}
-				return true;
-				
-				case 'updated':
-				message.tabId === this.session?.tabId && this.exec();
-				break;
+				return this.messenger[type]?.(message, tabId, stationId, ft, storedSession, sender, sendResponse, log);
 				
 			}
 			
 		}
 		
-	}
+	};
 	
-	static hidPage() {
+	static messenger = {
 		
-		this.log('"The tab was hidden."'),
+		identify(message, tabId, stationId, ft, storedSession, sender, sendResponse, log) {
+			
+			log('"Making inquire a tabId."', storedSession),
+			
+			tabId === storedSession?.tabId && browser.runtime.sendMessage({ session: storedSession, type: 'identified' });
+			
+		},
 		
-		browser.runtime.sendMessage(false);
+		received(message, tabId, stationId, ft, storedSession, sender, sendResponse, log) {
+			
+			if (message.uid === this.uid) {
+				
+				const { session } = message;
+				
+				(this.storedSession = session).stationId = stationId,
+				session.tabId = tabId,
+				session.ft = ft,
+				session.cookie = document.cookie,
+				
+				log('"Responsed a session data."', session),
+				
+				sendResponse();
+				
+			}
+			
+			return true;
+			
+		},
 		
-	}
+		updated(message, tabId, stationId, ft, storedSession, sender, sendResponse, log) {
+			
+			tabId === storedSession?.tabId && this.exec();
+			
+		}
+		
+	};
 	
 	constructor(url) {
 		
@@ -75,10 +85,13 @@ class Content extends WXLogger {
 		
 		if (this.match(url)) {
 			
-			const { onMessage, hidPage } = Content;
+			const { bound, messenger } = Content;
 			
-			addEventListener('pagehide', this.hidPage = hidPage.bind(this)),
-			browser.runtime.onMessage.addListener(this.onMessage = onMessage.bind(this));
+			Object.assign(this, this.getBound(bound)),
+			Object.assign(this.messenger = {}, this.getBound(messenger)),
+			
+			addEventListener('pagehide', this.hidPage),
+			browser.runtime.onMessage.addListener(this.onMessage);
 			
 		}
 		
