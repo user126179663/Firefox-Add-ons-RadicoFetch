@@ -111,7 +111,7 @@ class Content extends WXLogger {
 		
 		if (pathParts) {
 			
-			this.stationId = pathParts[1],
+			this.updateLogger(this.stationId = pathParts[1]),
 			this.ft = pathParts[2],
 			
 			browser.runtime.sendMessage(this.uid ??= crypto.randomUUID()),

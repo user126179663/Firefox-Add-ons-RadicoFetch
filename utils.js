@@ -244,50 +244,6 @@ class Mirror {
 	}
 	
 }
-//class JointStr extends Array {
-//	
-//	constructor(option) {
-//		
-//		(option && typeof option === 'object' && !Array.isArray(option)) || (option = { elements: option }),
-//		Array.isArray(option.elements) || (option.elements = [ option.elements ]),
-//		
-//		super(...option.elements);
-//		
-//		this.setFallbacks(option.fallbacks);
-//		
-//	}
-//	
-//	*[Symbol.iterator]() {
-//		
-//		const length = this.length;
-//		let i;
-//		
-//		i = -1;
-//		while (++i < l) yield this[i];
-//		
-//	}
-//	
-//	setFallbacks(kv) {
-//		
-//		this.fallbacks = kv instanceof KV ? kv : Array.isArray(kv) ? new KV(kv, 'pattern', 'value') : null;
-//		
-//	}
-//	
-//	toString(target, thisArgument, argumentsList) {
-//		
-//		const { fallbacks } = this;
-//		let str;
-//		
-//		str = '';
-//		for (const v of this) str += v instanceof Mirror ? v.weakReflect(target, thisArgument, argumentsList) : v;
-//		
-//		if (fallbacks instanceof KV) for (const { k, v } of fallbacks) str = str.replace(k, v);
-//		
-//		return str;
-//		
-//	}
-//	
-//}
 class Binder {
 	
 	static *[Symbol.iterator]() {
@@ -388,15 +344,7 @@ class Logger extends Binder {
 		this.$nameSuffix = Symbol('Logger.nameSuffix'),
 		this.$replacer = Symbol('Logger.replacer'),
 		
-		//this[this.$defaultLoggerArgs] = [ this.$label ],
-		
 		this[this.$defaultLoggerArgs] = [ this.$icon, this.$label ],
-		
-		//this[this.$args] = [
-		//	
-		//	{ target: this.$label, value: new Mirror(this.prototype.getReplacedLoggerValue) }
-		//	
-		//],
 		
 		this[this.$namePrefix] = this[this.$nameSuffix] = '',
 		this[this.$name] = '✍',
@@ -476,34 +424,6 @@ class Logger extends Binder {
 		
 	}
 	
-	//static getLogArgs(constructor = this, args, weakMirrorArgs = [ undefined, this ]) {
-	//	
-	//	const { iterator } = Symbol, { $args, replaceLogValue } = Logger;
-	//	let kv;
-	//	
-	//	for (const prototype of constructor) {
-	//		
-	//		if (typeof (kv = prototype[$args])?.[iterator] === 'function') {
-	//			
-	//			for (const { target, value } of kv)
-	//				args = replaceLogValue(prototype, args, target, value, weakMirrorArgs) ?? args;
-	//			hi(prototype,args);
-	//		}
-	//		
-	//	}
-	//	
-	//	return args;
-	//	
-	//}
-	
-	//static getLogLabel() {
-	//	
-	//	const { $name, $namePrefix, $nameSuffix } = Logger;
-	//	
-	//	return this[$namePrefix] + this[$name] + this[$nameSuffix];
-	//	
-	//}
-	
 	static replaceLoggerValues(values, replacer) {
 		
 		if (Array.isArray(values) && replacer && typeof replacer === 'object') {
@@ -525,26 +445,6 @@ class Logger extends Binder {
 		
 	}
 	
-	//static replaceLogValue(constructor, args, target, value, weakMirrorArgs) {
-	//	
-	//	if	(
-	//			Array.isArray
-	//				(typeof args === 'symbol' && Object.hasOwn(constructor, args) ? (args = constructor[args]) : args)
-	//		)
-	//	{
-	//		
-	//		let i;
-	//		
-	//		i = -1, args = [ ...args ];
-	//		while ((i = args.indexOf(target, i + 1)) !== -1)
-	//			args[i] = value instanceof Mirror ? value.weakReflect.apply(value, weakMirrorArgs) : value;
-	//		
-	//		return args;
-	//		
-	//	}
-	//	
-	//}
-	
 	constructor(id) {
 		
 		super();
@@ -553,7 +453,7 @@ class Logger extends Binder {
 		
 		Object.assign(this[$replacer] = {}, this.getBound(Binder.merge(this.constructor, Logger.$replacer))),
 		
-		this.update(id);
+		this.updateLogger(id);
 		
 	}
 	
@@ -595,7 +495,7 @@ class Logger extends Binder {
 		
 	}
 	
-	update(id, ...targets) {
+	updateLogger(id, ...targets) {
 		
 		const logger = this.constructor.getLogger(), targetsLength = targets.length;
 		let k,v;
@@ -607,44 +507,6 @@ class Logger extends Binder {
 									(this[k] = this.bindLogger((v = logger[k]).methodName, v.args));
 		
 	}
-	
-	//getLogArgs(args) {
-	//	
-	//	const { $args } = Logger;
-	//	let kv;
-	//	
-	//	for (const prototype of this.constructor) {
-	//		
-	//		//coco constructor[$args] を merge する？ merge する場合、同値を KV にしてそのメソッドを使う必要があると思われる。
-	//		// $args は実際のコンソールの各メソッドに渡される引数を想定した記述子
-	//		if ((kv = prototype[$args]) instanceof Array) {
-	//			
-	//			for (const { target, value } of kv) args = this.replaceLogValue(args, target, value) ?? args;
-	//			
-	//		}
-	//		
-	//	}
-	//	
-	//	return args;
-	//	
-	//}
-	//
-	//replaceLogValue(args, target, value) {
-	//	
-	//	if (Array.isArray(args)) {
-	//		
-	//		const replaced = [];
-	//		let i;
-	//		
-	//		i = -1;
-	//		while ((i = args.indexOf(target, i + 1)) !== -1)
-	//			replaced[i] = value instanceof Mirror ? value.weakReflect(undefined, this) : value;
-	//		
-	//		return replaced;
-	//		
-	//	}
-	//	
-	//}
 	
 	get loggerIcon() {
 		

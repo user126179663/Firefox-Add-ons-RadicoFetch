@@ -38,18 +38,24 @@ class Background extends WXLogger {
 	
 	static connection = {
 		
+		// ダウンロードなどの中止の受け付け。message が false だと進行中のダウンロードを中止するが、後続のダウンロードを始めるなどその後の処理が未実装。
 		boolean(message, tabId, sender, sendResponse, radicoSession, log) {
 			
 			message || (radicoSession[tabId]?.abort(), delete radicoSession[tabId]);
 			
 		},
 		
+		// タブやセッションの情報を交換し終えたあとのタブとの個別の通信。
 		object(message, tabId, sender, sendResponse, radicoSession, log) {
 			
 			message && this.messenger[message.type]?.(message, tabId, sender, sendResponse, radicoSession, log);
 			
 		},
 		
+		// todo: 各種例外処理が未実装。
+		// content_page からの通信のオファー。オファーとともに送られてくるタブの情報に基づき background がウェブサイトとの通信を試行する。
+		// 通信が成功した場合、得られたセッション情報やタブの ID を content_page に送ってそこに保存される。
+		// これによって background が時間経過で停止しても、pageAction を通じて content_page からセッション情報を取得できる。
 		string(message, tabId, sender, sendResponse, radicoSession, log) {
 			
 			const { pageAction, tabs } = browser;
