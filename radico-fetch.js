@@ -1,14 +1,102 @@
-class AbortableFetch extends WXLogger {
+class Basement extends WXLogger {
+	
+	static {
+		
+		this.$actionIcon = Symbol('Basement.actionIcon'),
+		this.$actionTitle = Symbol('Basement.actionTitle');
+		
+	}
+	
+	static typeofIconSrc(src) {
+		
+		switch (typeof src) {
+			
+			case 'string':
+			return 'path';
+			
+			case 'object':
+			if (src instanceof ImageData) return 'imageData';
+			else if (src) for (const v of src) return Basement.typeofIconSrc(v);
+			
+		}
+		
+		return 'invalid';
+		
+	}
+	
+	constructor() {
+		
+		super(...arguments);
+		
+		const { $actionIcon, $actionTitle } = Basement;
+		
+		this[$actionIcon] = {},
+		this[$actionTitle] = {};
+		
+	}
+	
+	hideAction(tabId) {
+		
+		browser.pageAction.hide(tabId);
+		
+	}
+	
+	setActionIcon(src, tabId) {
+		
+		const { $actionIcon, typeofIconSrc } = Basement, detail = this[$actionIcon], current = typeofIconSrc(src);
+		
+		current === 'invalid' ?
+			(delete detail.path, delete detail.imageData) :
+			(detail[current] = src, delete detail[current === 'path' ? 'imageData' : 'path']),
+		tabId === undefined || (detail.tabId = tabId),
+		
+		browser.pageAction.setIcon(detail);
+		
+	}
+	setActionTitle(title, tabId) {
+		
+		const detail = this[Basement.$actionTitle];
+		
+		title === undefined || (detail.title = title),
+		tabId === undefined || (detail.tabId = tabId),
+		
+		browser.pageAction.setTitle(detail);
+		
+	}
+	
+	showActionIcon(tabId) {
+		
+		browser.pageAction.show(tabId);
+		
+	}
+	
+}
+class AbortableFetch extends Basement {
 	
 	static {
 		
 		this.$ac = Symbol('AbortableFetch.ac'),
+		this.$afAbortedOption = Symbol('AbortableFetch.afAbortedOption'),
+		
+		this[this.$afAbortedOption] = { once: true },
 		
 		this[Logger.$name] = '🚨-📥';
 		
 	}
 	
-	constructor() { super(); }
+	static aborted(event) {
+		
+		this.log("Fetching was borted.", event);
+		
+	}
+	
+	constructor() {
+		
+		super();
+		
+		this.aborted = this.constructor.aborted.bind(this);
+		
+	}
 	
 	abort() {
 		
@@ -25,8 +113,14 @@ class AbortableFetch extends WXLogger {
 	getSignal() {
 		
 		const { $ac } = AbortableFetch, signal = this?.[$ac]?.signal;
+		let ac;
 		
-		return !signal || signal.aborted ? (this[$ac] = new AbortController()).signal : signal;
+		(!signal || signal.aborted) ?
+			(ac = this[$ac] = new AbortController()).signal.
+				addEventListener('aborted', this.aborted, this.constructor[AbortableFetch.$afAbortedOption]) :
+			(ac = this[$ac]);
+		
+		return ac.signal;
 		
 	}
 	
@@ -41,7 +135,7 @@ class AbortableFetch extends WXLogger {
 	}
 	
 }
-class RadicoSession extends WXLogger {
+class RadicoSession extends Basement {
 	
 	static {
 		
@@ -55,7 +149,6 @@ class RadicoSession extends WXLogger {
 		
 	}
 	
-	//issue: auth2が二回要求される
 	static auth2(details) {
 		
 		details.method === 'GET' && RadicoSession.rxTargetRequestURL.test(details.url) &&
@@ -159,7 +252,7 @@ class RadicoFetch extends AbortableFetch {
 		
 		date instanceof Date || (date = getDate(date));
 		
-		const hours = date.getHours(), isMidnight = hours > 0 && hours < 5;
+		const hours = date.getHours(), isMidnight = hours > -1 && hours < 5;
 		
 		return getDateStr(isMidnight ? date.setTime(date.getTime() - 86400000) : date).substring(0,8);
 		
@@ -200,6 +293,12 @@ class RadicoFetch extends AbortableFetch {
 		for await (const chunk of body) text += td.decode(chunk);
 		
 		return text;
+		
+	}
+	
+	static throwError() {
+		
+		throw new Error(...arguments);
 		
 	}
 	
@@ -251,8 +350,8 @@ class RadicoFetch extends AbortableFetch {
 	
 	async request(sessionData) {
 		
-		const	{ getCookie, getDate, getProgramDate, urlPlaylist, urlStationDate } = RadicoFetch,
-				{ ft, stationId, reqHeaders: reqHeadersRaw, resHeaders: resHeadersRaw } = sessionData,
+		const	{ getCookie, getDate, getProgramDate, throwError, urlPlaylist, urlStationDate } = RadicoFetch,
+				{ ft, reqHeaders: reqHeadersRaw, resHeaders: resHeadersRaw, stationId, tabId } = sessionData,
 				prgFt = getProgramDate(ft),
 				reqHeaders = new KV(reqHeadersRaw, 'name', 'value'),
 				resHeaders = new KV(resHeadersRaw, 'name', 'value'),
@@ -262,11 +361,13 @@ class RadicoFetch extends AbortableFetch {
 		this.sessionData = sessionData;
 		
 		await	this.fetch(urlStationDate + prgFt + '/' + stationId + '.xml').then(response => response.text()).
-					then(text => (prg = new DOMParser().parseFromString(text, 'text/xml').querySelector(`prog[ft="${ft}"]`)));
+					then(text => (prg = new DOMParser().parseFromString(text, 'text/xml').querySelector(`prog[ft="${ft}"]`))).
+						catch(throwError);
 		
 		if (prg) {
 			
 			const	{ createObjectURL } = URL,
+					{ setPageActionTitle } = Background,
 					{ rxPicExt, dlOption, DOMToObject, getDateStr, maxChunkLength, metaBlobOption } = RadicoFetch,
 					{ downloads } = browser,
 					to = prg.getAttribute('to'),
@@ -308,6 +409,8 @@ class RadicoFetch extends AbortableFetch {
 			
 			for (const { k, v } of playlistParam) playlistURLParam.append(k, v);
 			
+			this.setActionTitle('ダウンロード情報を収集中...', tabId),
+			
 			i = -1;
 			while (++i <= requestLength && (remained = totalDuration - i * maxChunkLength) > 0) {
 				
@@ -316,21 +419,23 @@ class RadicoFetch extends AbortableFetch {
 				this.log(i, requestLength, remained < maxChunkLength, remained, playlistURLParam.get('l'), playlistURLParam.get('seek'), startTime, totalDuration, remained < maxChunkLength ? totalDuration - length : length * i);
 				
 				await	this.getURLsFromM3U8(urlPlaylist + '?' + playlistURLParam, playlistOption).
-							then(urls => this.getURLsFromM3U8(urls[0])).then(urls => dlUrls.push(...urls)).
-								catch(() => { throw new Error() });
+							then(urls => this.getURLsFromM3U8(urls[0])).then(urls => dlUrls.push(...urls)).catch(throwError);
 				
 			}
 			
 			const	dlUrlsLength = dlUrls.length;
 			
-			this.log(dlUrls);
+			this.log(dlUrls),
+			
+			this.setActionTitle('ダウンロード中...', tabId),
 			
 			prgFolder.file(prgFileName + '.json', JSON.stringify(DOMToObject(prg), null, '\t')),
 			prgCoverURL &&	await fetch(prgCoverURL).then(response => response.arrayBuffer()).
 									then(ab => prgFolder.file(prgCoverFileName, ab)),
 			
 			await	fetch(browser.runtime.getURL('resources/concat.bat')).then(response => response.text()).
-						then(text => prgFolder.file('concat.bat', text.replace(rxPicExt, `$1$2${prgCoverExt}$3`)));
+						then(text => prgFolder.file('concat.bat', text.replace(rxPicExt, `$1$2${prgCoverExt}$3`))).
+							catch(throwError);
 			
 			i = -1, concat = '';
 			while (++i < dlUrlsLength) {
@@ -345,7 +450,7 @@ class RadicoFetch extends AbortableFetch {
 																			),
 																		ab
 																	)
-									),
+									).catch(throwError),
 				concat += `file '.\\aac\\${concatPath}'\n`;
 				
 			}
@@ -355,8 +460,16 @@ class RadicoFetch extends AbortableFetch {
 			//await	zip.generateAsync({ type: 'base64' }).
 			//			then(base64 => (location.href = 'data:application/zip;base64,' + base64));
 			
-			await	zip.generateAsync({ type: 'blob' }).
-						then(blob => (downloads.download({ filename: prgFileName + '.zip', saveAs: true, url: URL.createObjectURL(blob) })));
+			await	zip.generateAsync	(
+												{ type: 'blob' },
+												({ currentFile, percent }) =>
+													this.setActionTitle(`ファイル作成中(${percent|0}% – ${currentFile})...`, tabId)
+											).
+						then	(
+									blob =>	(
+													downloads.download({ filename: prgFileName + '.zip', saveAs: true, url: createObjectURL(blob) })
+												)
+								);
 			
 		}
 		

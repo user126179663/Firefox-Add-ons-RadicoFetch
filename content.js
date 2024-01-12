@@ -14,6 +14,12 @@ class Content extends WXLogger {
 	
 	static bound = {
 		
+		downloaded() {
+			this.log();
+			browser.runtime.sendMessage({ type: (this.detect() ? '' : 'de') + 'activate', url: location.href });
+			
+		},
+		
 		hidPage() {
 			
 			this.log('"A tab was hidden."'),
@@ -30,9 +36,10 @@ class Content extends WXLogger {
 			
 			if (message && typeof message === 'object') {
 				
-				const { ft, messenger, stationId, storedSession } = this, { tabId, type } = message;
+				const { ft, stationId, storedSession } = this, { tabId, type } = message;
 				
-				return this.messenger[type]?.(message, tabId, stationId, ft, storedSession, sender, sendResponse, log);
+				return	Content.messenger[type]?.
+								call?.(this, message, tabId, stationId, ft, storedSession, sender, sendResponse, log);
 				
 			}
 			
@@ -42,26 +49,18 @@ class Content extends WXLogger {
 	
 	static messenger = {
 		
-		identify(message, tabId, stationId, ft, storedSession, sender, sendResponse, log) {
-			
-			log('"Making inquire a tabId."', storedSession),
-			
-			tabId === storedSession?.tabId && browser.runtime.sendMessage({ session: storedSession, type: 'identified' });
-			
-		},
-		
-		received(message, tabId, stationId, ft, storedSession, sender, sendResponse, log) {
+		authenticated(message, tabId, stationId, ft, storedSession, sender, sendResponse, log) {
 			
 			if (message.uid === this.uid) {
 				
 				const { session } = message;
 				
-				(this.storedSession = session).stationId = stationId,
+				session.stationId = stationId,
 				session.tabId = tabId,
 				session.ft = ft,
 				session.cookie = document.cookie,
 				
-				log('"Responsed a session data."', session),
+				log('"Authenticated."', Object.assign(storedSession, session)),
 				
 				sendResponse();
 				
@@ -71,9 +70,48 @@ class Content extends WXLogger {
 			
 		},
 		
+		detect(message, tabId, stationId, ft, storedSession, sender, sendResponse, log) {
+			
+			log(`"Background required a detection."`),
+			
+			this.sendActivation();
+			
+		},
+		
+		downloaded(message, tabId, stationId, ft, storedSession, sender, sendResponse, log) {
+			
+			log("Finished the downloading."),
+			
+			this.resolveDownloading?.();
+			
+		},
+		
+		identify(message, tabId, stationId, ft, storedSession, sender, sendResponse, log) {
+			
+			log('"Making inquire a tabId."', storedSession),
+			
+			//coco ダウンロード中に別ページに移動した時に別ページが番組ではない場合、ページアクションをダウンロード処理が完了するまで表示させ、完了後に消す処理
+			tabId === storedSession?.tabId &&
+				(
+					this.downloading = new Promise((rs, rj) =>  {
+						
+						this.resolveDownloading = rs,
+						this.rejectDownloading = rj,
+						
+						browser.runtime.sendMessage({ session: storedSession, type: 'identified' });
+						
+					})
+				);
+			
+		},
+		
 		updated(message, tabId, stationId, ft, storedSession, sender, sendResponse, log) {
 			
-			tabId === storedSession?.tabId && this.exec();
+			tabId === storedSession?.tabId &&
+				(
+					this.log(`"Updated the URL for this tab#${tabId}."`),
+					this.sendActivation()
+				);
 			
 		}
 		
@@ -83,17 +121,18 @@ class Content extends WXLogger {
 		
 		super();
 		
-		if (this.match(url)) {
-			
-			const { bound, messenger } = Content;
-			
-			Object.assign(this, this.getBound(bound)),
-			Object.assign(this.messenger = {}, this.getBound(messenger)),
-			
-			addEventListener('pagehide', this.hidPage),
-			browser.runtime.onMessage.addListener(this.onMessage);
-			
-		}
+		const { assign } = Object, { bound } = Content;
+		
+		this.uid = crypto.randomUUID(),
+		
+		this.storedSession = {},
+		
+		assign(this, this.getBound(bound)),
+		
+		this.downloading = Promise.resolve(),
+		
+		addEventListener('pagehide', this.hidPage),
+		browser.runtime.onMessage.addListener(this.onMessage);
 		
 	}
 	
@@ -103,27 +142,43 @@ class Content extends WXLogger {
 		
 	}
 	
-	exec(url) {
+	detect(url) {
 		
-		const pathParts = this.match(url);
-		
-		//this.log(location.href);
+		const { log } = this, pathParts = this.match(url);
 		
 		if (pathParts) {
 			
-			this.updateLogger(this.stationId = pathParts[1]),
-			this.ft = pathParts[2],
+			const { storedSession } = this;
 			
-			browser.runtime.sendMessage(this.uid ??= crypto.randomUUID()),
+			this.updateLogger(this.stationId = storedSession.stationId = pathParts[1]),
+			this.ft = storedSession.ft = pathParts[2],
 			
-			this.log('"Detected a program."', location.href);
+			this.log('"Detected a program."', location.href, pathParts);
 			
-		}
+		} else this.log('"There seems not to be a page for a program."', pathParts);
+		
+		return !!pathParts;
+		
+	}
+	
+	contact(url) {
+		
+		browser.runtime.sendMessage(this.uid),
+		
+		this.log('"Contact with background."');
+		
+	}
+	
+	async sendActivation() {
+		
+		const { downloaded, downloading } = this;
+		
+		downloading?.then?.(downloaded);
 		
 	}
 	
 }
 
-new Content().exec();
+new Content().contact();
 
 })();

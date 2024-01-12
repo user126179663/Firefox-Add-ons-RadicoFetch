@@ -1,4 +1,4 @@
-class Background extends WXLogger {
+class Background extends Basement {
 	
 	static {
 		
@@ -19,18 +19,34 @@ class Background extends WXLogger {
 			
 			const { log, requesting } = this, { id: tabId } = event;
 			
-			tabId in requesting ||
-				(log('"Interacted page action."', event), browser.tabs.sendMessage(tabId, { type: 'identify', tabId }));
+			if (tabId in requesting) {
+				
+				const { storedFetch } = this;
+				let k;
+				
+				for (k in storedFetch)
+					storedFetch[k].abort(), log(`"Aborted fetching in a tab#${k}"`), delete storedFetch[k];
+				
+				this.setActionIcon(undefined, tabId);
+				
+			} else {
+				
+				log('"Interacted page action."', event),
+				
+				browser.tabs.sendMessage(tabId, { type: 'identify', tabId });
+				
+			}
 			
 		},
 		
 		messageFromContent(message, sender, sendResponse) {
 			
-			const { connection, log, radicoSession } = this, { tab: { id: tabId } } = sender;
+			const { connection, log, storedFetch, storedSession } = this, { tab: { id: tabId } } = sender;
 			
 			log('"Received a message."', message, sender);
 			
-			connection[typeof message]?.(message, tabId, sender, sendResponse, radicoSession, log);
+			Background.connection[typeof message]?.
+				call?.(this, message, tabId, sender, sendResponse, storedFetch, storedSession, log);
 			
 		}
 		
@@ -39,30 +55,29 @@ class Background extends WXLogger {
 	static connection = {
 		
 		// ダウンロードなどの中止の受け付け。message が false だと進行中のダウンロードを中止するが、後続のダウンロードを始めるなどその後の処理が未実装。
-		boolean(message, tabId, sender, sendResponse, radicoSession, log) {
+		boolean(message, tabId, sender, sendResponse, storedFetch, storedSession, log) {
 			
-			message || (radicoSession[tabId]?.abort(), delete radicoSession[tabId]);
+			message || (storedSession[tabId]?.abort?.(), storedSession[tabId]?.abort?.(), delete storedSession[tabId]);
 			
 		},
 		
 		// タブやセッションの情報を交換し終えたあとのタブとの個別の通信。
-		object(message, tabId, sender, sendResponse, radicoSession, log) {
+		object(message, tabId, sender, sendResponse, storedFetch, storedSession, log) {
 			
-			message && this.messenger[message.type]?.(message, tabId, sender, sendResponse, radicoSession, log);
+			message && Background.messenger[message.type]?.apply?.(this, arguments);
 			
 		},
 		
-		// todo: 各種例外処理が未実装。
 		// content_page からの通信のオファー。オファーとともに送られてくるタブの情報に基づき background がウェブサイトとの通信を試行する。
 		// 通信が成功した場合、得られたセッション情報やタブの ID を content_page に送ってそこに保存される。
 		// これによって background が時間経過で停止しても、pageAction を通じて content_page からセッション情報を取得できる。
-		string(message, tabId, sender, sendResponse, radicoSession, log) {
+		string(message, tabId, sender, sendResponse, storedFetch, storedSession, log) {
 			
-			const { pageAction, tabs } = browser;
+			const { tabs } = browser;
 			
-			(radicoSession[tabId] = radicoSession[tabId] ??= new RadicoSession(tabId)).session.
-				then(session => tabs.sendMessage(tabId, { session, tabId, type: 'received', uid: message }).
-					then(() => pageAction.show(tabId)));
+			(storedSession[tabId] ??= new RadicoSession()).session.
+				then(session => tabs.sendMessage(tabId, { session, tabId, type: 'authenticated', uid: message }).
+					then(() => tabs.sendMessage(tabId, { type: 'detect' })));
 			
 		}
 		
@@ -70,27 +85,44 @@ class Background extends WXLogger {
 	
 	static messenger = {
 		
-		identified(message, tabId, sender, sendResponse, radicoSession, log) {
+		activate(message, tabId, sender, sendResponse, storedFetch, storedSession, log) {
 			
-			const	{ pageAction } = browser,
-					{ icon: { downloadable, requesting } } = Background,
+			this.showActionIcon(tabId),
+			
+			log(`"Showed a location bar button for a tab#${tabId}."`);
+			
+		},
+		
+		deactivate(message, tabId, sender, sendResponse, storedFetch, storedSession, log) {
+			
+			this.hideAction(tabId),
+			
+			log(`"Hid a location bar button for a tab#${tabId}."`);
+			
+		},
+		
+		identified(message, tabId, sender, sendResponse, storedFetch, storedSession, log) {
+			
+			const	{ icon: { downloadable, requesting } } = Background,
 					{ requesting: req } = this,
-					iconDetails = { tabId },
 					finalize = result =>	{
 													
-													iconDetails.path = downloadable,
-													pageAction.setIcon(iconDetails),
+													this.setActionIcon(downloadable, tabId),
+													this.setActionTitle('ダウンロードする', tabId),
+													
 													delete req[tabId],
 													
-													log('"Finished downloading."', result ?? '✅', message.session);
+													log('"Finished downloading."', result ?? '✅', message.session),
+													
+													browser.tabs.sendMessage(tabId, { type: 'downloaded' });
 													
 												};
 			
 			req[tabId] = true,
-			iconDetails.path = requesting,
-			pageAction.setIcon(iconDetails),
+			this.setActionIcon(requesting, tabId),
+			this.setActionTitle('ダウンロード準備中...', tabId),
 			
-			new RadicoFetch().request(message.session).finally(finalize),
+			(storedFetch[tabId] = new RadicoFetch()).request(message.session).finally(finalize),
 			
 			log('"Tried a request."', message);
 			
@@ -102,14 +134,13 @@ class Background extends WXLogger {
 		
 		super();
 		
-		const { assign } = Object, { pageAction, runtime } = browser, { bound, connection, messenger } = Background;
+		const { assign } = Object, { pageAction, runtime } = browser;
 		
-		this.radicoSession = {},
+		this.storedSession = {},
+		this.storedFetch = {},
 		this.requesting = {},
 		
-		assign(this, this.getBound(bound)),
-		assign(this.connection = {}, this.getBound(connection)),
-		assign(this.messenger = {}, this.getBound(messenger)),
+		assign(this, this.getBound(Background.bound)),
 		
 		pageAction.onClicked.addListener(this.interactedPageAction),
 		runtime.onMessage.addListener(this.messageFromContent),
@@ -124,7 +155,8 @@ const
 background = new Background(),
 tabUpdated = (tabId, event) => {
 	
-	background.log(`"Updated a tab: ${tabId}."`, event),
+	background.log(`"Updated a tab#${tabId}."`, event),
+	
 	browser.tabs.sendMessage(tabId, { type: 'updated', tabId });
 	
 };

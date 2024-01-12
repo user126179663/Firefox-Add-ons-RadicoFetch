@@ -24,7 +24,7 @@
 	"page_action": {
 		
 		"default_icon": "resources/download.svg",
-		"default_title": "Download"
+		"default_title": "ダウンロードする"
 		//"show_matches": [ "*://radiko.jp/*" ]
 		
 	},
