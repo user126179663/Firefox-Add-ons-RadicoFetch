@@ -101,7 +101,7 @@ class Background extends Basement {
 			
 		},
 		
-		identified(message, tabId, sender, sendResponse, storedFetch, storedSession, log) {
+		async identified(message, tabId, sender, sendResponse, storedFetch, storedSession, log) {
 			
 			const	{ icon: { downloadable, requesting } } = Background,
 					{ requesting: req } = this,
@@ -116,15 +116,22 @@ class Background extends Basement {
 													
 													browser.tabs.sendMessage(tabId, { type: 'downloaded' });
 													
-												};
+												},
+					table = new RadicoDailyTableFetch(message.session);
 			
 			req[tabId] = true,
 			this.setActionIcon(requesting, tabId),
 			this.setActionTitle('ダウンロード準備中...', tabId),
 			
-			(storedFetch[tabId] = new RadicoFetch()).request(message.session).finally(finalize),
+			await table.update(),
 			
-			log('"Tried a request."', message);
+			table.request(message.session.ft).finally(finalize),
+			
+			log('"Tried to request."', message);
+			
+			//(storedFetch[tabId] = new RadicoFetch()).request(message.session).finally(finalize),
+			
+			//log('"Tried a request."', message);
 			
 		}
 		

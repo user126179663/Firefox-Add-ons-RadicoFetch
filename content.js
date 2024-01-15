@@ -15,7 +15,7 @@ class Content extends WXLogger {
 	static bound = {
 		
 		downloaded() {
-			this.log();
+			
 			browser.runtime.sendMessage({ type: (this.detect() ? '' : 'de') + 'activate', url: location.href });
 			
 		},

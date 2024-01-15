@@ -397,6 +397,9 @@ class Logger extends Binder {
 		this[this.$logger] = {
 			
 			dir: { args: this[this.$defaultLoggerArgs], methodName: 'dir' },
+			group: { args: this[this.$defaultLoggerArgs], methodName: 'group' },
+			groupCollapsed: { args: this[this.$defaultLoggerArgs], methodName: 'groupCollapsed' },
+			groupEnd: { args: this[this.$defaultLoggerArgs], methodName: 'groupEnd' },
 			info: { args: this[this.$defaultLoggerArgs], methodName: 'info' },
 			log: { args: this[this.$defaultLoggerArgs], methodName: 'log' },
 			trace: { args: this[this.$defaultLoggerArgs], methodName: 'trace' },
