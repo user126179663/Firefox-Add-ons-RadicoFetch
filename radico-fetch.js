@@ -263,10 +263,7 @@ class RadicoFetch extends AbortableFetch {
 		this.$reqHeaders = Symbol('RadicoFetch.reqHeaders'),
 		this.$resHeaders = Symbol('RadicoFetch.resHeaders'),
 		
-		this.rxTargetRequestURL = /^https:\/\/radiko.jp\/v2\/api\/auth1$/,
-		this.rxUrlPathname = /\/tf\/playlist.m3u8$/,
 		this.rxM3U8Url = /^(https:\/\/.*?)$/gm,
-		this.rxPicExt = /(.*?)(set picext=)(.*?)/m,
 		this.rxPicExt = /(set picext=)/gm,
 		
 		this.maxChunkLength = 300,
@@ -285,20 +282,6 @@ class RadicoFetch extends AbortableFetch {
 		
 	}
 	
-	static getDate(str) {
-		
-		return new Date(`${str.substr(0,4)}-${str.substr(4,2)}-${str.substr(6,2)} ${str.substr(8,2)}:${str.substr(10,2)}:${str.substr(12,2)}`);
-		
-	}
-	
-	static getDateStr() {
-		
-		const date = arguments[0] instanceof Date ? arguments[0] : new Date(...arguments);
-		
-		return `${date.getFullYear()}${(date.getMonth() + 1 + '').padStart(2, '0')}${(date.getDate()+'').padStart(2, '0')}${(date.getHours()+'').padStart(2, '0')}${(date.getMinutes()+'').padStart(2, '0')}${(date.getSeconds()+'').padStart(2, '0')}`;
-		
-	}
-	
 	static getLastPathFromURL(url) {
 		
 		url instanceof URL || (url = new URL(url));
@@ -306,18 +289,6 @@ class RadicoFetch extends AbortableFetch {
 		const { pathname } = url;
 		
 		return pathname.substring(pathname.lastIndexOf('/') + 1);
-		
-	}
-	
-	static getProgramDate(date) {
-		
-		const { getDate, getDateStr } = RadicoFetch;
-		
-		date instanceof Date || (date = getDate(date));
-		
-		const hours = date.getHours(), isMidnight = hours > -1 && hours < 5;
-		
-		return getDateStr(isMidnight ? date.setTime(date.getTime() - 86400000) : date).substring(0,8);
 		
 	}
 	
@@ -437,21 +408,19 @@ class RadicoFetch extends AbortableFetch {
 					prgImgFileName = prgFileName + '.' + imgExt,
 					zip = new JSZip(),
 					prgFolder = zip.folder(prgFileName);
-			let i, length, remained, exceeds, dlUrl, pathname, concat,concatPath;
+			let i, length, remained, exceeds, dlUrl, pathname, concat,concatPath, currentDuration;
 			
 			for (const { k, v } of new KV(playlistParam)) playlistURLParam.append(k, v);
 			
 			this.setActionTitle(`${stLabel} ダウンロード情報を収集中... – ${title}`, tabId),
 			
-			i = -1, this.groupCollapsed(`"📤 Extracting URLs from ${urlPlaylist}."`);
+			i = -1, this.groupCollapsed(`"📤 Extracting URLs from ${urlPlaylist}."`), currentDuration = 0;
 			while (++i <= requestLength && (remained = duration - i * maxChunkLength) > 0) {
 				
 				playlistURLParam.set('l', length = (exceeds = remained < maxChunkLength) ? remained : maxChunkLength),
 				playlistURLParam.set('seek', new RadicoDate(startTime + (exceeds ? duration - length : length * i) * 1000).toString()),
-				//playlistURLParam.set('seek', getDateStr(startTime + (remained < maxChunkLength ? duration - length : length * i) * 1000)),
 				
-				log(`"${exceeds ? '⌛' : '⏳'} ${i}/${requestLength} [Length: ${length}, Seek Position: ${playlistURLParam.get('seek')} /${duration}]"`),
-				//log(i, requestLength, exceeds, remained, length, playlistURLParam.get('seek'), startTime, duration, exceeds ? duration - length : length * i);
+				log(`"${exceeds ? '⌛' : '⏳'} ${i}/${requestLength} [Seek: ${playlistURLParam.get('seek')}, Duration(sec.): [Accumulation: ${currentDuration += length}/${duration}, Length: ${length})]]"`),
 				
 				await	this.getURLsFromM3U8(urlPlaylist + '?' + playlistURLParam, playlistOption).
 							then(urls => this.getURLsFromM3U8(urls[0])).then(urls => dlUrls.push(...urls)).catch(throwError);
@@ -465,13 +434,13 @@ class RadicoFetch extends AbortableFetch {
 			
 			prgFolder.file(prgFileName + '.json', JSON.stringify(prg.toJSON(), null, '\t')),
 			
-			prgImgFileName &&	await	this.fetch(imgURL).then(response => response.arrayBuffer()).
-												then(ab => prgFolder.file(prgImgFileName, ab)).catch(throwError),
+			prgImgFileName &&
+				await	this.fetch(imgURL).then(toAB).then(ab => prgFolder.file(prgImgFileName, ab)).catch(throwError),
 			
 			await	this.fetch(browser.runtime.getURL('resources/concat.bat')).then(toText).
 						then(text => prgFolder.file('concat.bat', text.replaceAll(rxPicExt, `$1${imgExt}`))).catch(throwError);
 			
-			i = -1, concat = '', this.groupCollapsed(`"Downloading ${dlUrlsLength} files... (${getLastPathFromURL(dlUrls[0])} – ${getLastPathFromURL(dlUrls[dlUrlsLength - 1])})"`);
+			i = -1, concat = '', this.groupCollapsed(`"📥 Downloading ${dlUrlsLength} files... (${getLastPathFromURL(dlUrls[0])} – ${getLastPathFromURL(dlUrls[dlUrlsLength - 1])})"`);
 			while (++i < dlUrlsLength) {
 				
 				log(`📥 ${i + 1}/${dlUrlsLength}. `, dlUrls[i]),
@@ -486,7 +455,7 @@ class RadicoFetch extends AbortableFetch {
 			
 			prgFolder.file(prgFileName + '.txt', concat),
 			
-			log(`"Zipping files..."`, prgFileName),
+			log(`"📁 Zipping files into <${prgFileName}.zip>..."`, ),
 			
 			await	zip.generateAsync	(
 												{ type: 'blob' },
@@ -502,132 +471,6 @@ class RadicoFetch extends AbortableFetch {
 		}
 		
 	}
-	
-	//async _request(sessionData) {
-	//	
-	//	const	{ getCookie, getDate, getProgramDate, throwError, urlPlaylist, urlStationDate } = RadicoFetch,
-	//			{ ft, reqHeaders: reqHeadersRaw, resHeaders: resHeadersRaw, stationId, tabId } = sessionData,
-	//			prgFt = getProgramDate(ft),
-	//			reqHeaders = new KV(reqHeadersRaw, 'name', 'value'),
-	//			resHeaders = new KV(resHeadersRaw, 'name', 'value'),
-	//			cookie = getCookie(reqHeaders.get('Cookie'));
-	//	let prg;
-	//	
-	//	this.sessionData = sessionData;
-	//	
-	//	await	this.fetch(urlStationDate + prgFt + '/' + stationId + '.xml').then(response => response.text()).
-	//				then(text => (prg = new DOMParser().parseFromString(text, 'text/xml').querySelector(`prog[ft="${ft}"]`))).
-	//					catch(throwError);
-	//	
-	//	if (prg) {
-	//		
-	//		const	{ createObjectURL } = URL,
-	//				{ setPageActionTitle } = Background,
-	//				{ rxPicExt, dlOption, DOMToObject, getDateStr, maxChunkLength, metaBlobOption } = RadicoFetch,
-	//				{ downloads } = browser,
-	//				to = prg.getAttribute('to'),
-	//				playlistURLParam = new URLSearchParams(''),
-	//				playlistParam =	new KV(
-	//													[
-	//														{ k: 'station_id', v: stationId },
-	//														{ k: 'start_at', v: ft },
-	//														{ k: 'ft', v: ft },
-	//														{ k: 'end_at', v: to },
-	//														{ k: 'to', v: to },
-	//														{ k: 'l', v: maxChunkLength },
-	//														{ k: 'lsid', v: cookie.get('a_exp') },
-	//														{ k: 'type', v: 'b' }
-	//													]
-	//												),
-	//				playlistOption =	{
-	//											headers: {
-	//												'X-Radiko-AreaId': cookie.get('default_area_id'),
-	//												'X-Radiko-AuthToken': resHeaders.get('x-radiko-authtoken')
-	//											}
-	//										},
-	//				startTime = getDate(ft).getTime(),
-	//				totalDuration = parseInt((getDate(to).getTime() - startTime) / 1000),
-	//				requestLength = parseInt(totalDuration / maxChunkLength),
-	//				dlUrls = [],
-	//				prgStation = '[' + stationId + ']',
-	//				prgTitle = prg.querySelector('title').textContent,
-	//				prgLabel = prgStation + ' ' + prgTitle,
-	//				prgFileName =	prgLabel + ' – ' +
-	//									prgFt.substring(0, 4).padStart(2, '0') + '-' +
-	//									prgFt.substring(4, 6).padStart(2, '0') + '-' +
-	//									prgFt.substring(6, 8).padStart(2, '0') + ' ' +
-	//									prg.getAttribute('ftl') + '-' + prg.getAttribute('tol'),
-	//				prgCoverURL = prg.querySelector('img').textContent,
-	//				prgCoverExt = new URL(prgCoverURL)?.pathname?.split?.('.')?.at?.(-1),
-	//				prgCoverFileName = prgFileName + '.' + prgCoverExt,
-	//				zip = new JSZip(),
-	//				prgFolder = zip.folder(prgFileName);
-	//		let i, length, remained, dlUrl, pathname, concat,concatPath;
-	//		
-	//		for (const { k, v } of playlistParam) playlistURLParam.append(k, v);
-	//		
-	//		this.setActionTitle(`ダウンロード情報を収集中... – ${prgLabel}`, tabId),
-	//		
-	//		i = -1;
-	//		while (++i <= requestLength && (remained = totalDuration - i * maxChunkLength) > 0) {
-	//			
-	//			playlistURLParam.set('l', length = remained < maxChunkLength ? remained : maxChunkLength),
-	//			playlistURLParam.set('seek', getDateStr(startTime + (remained < maxChunkLength ? totalDuration - length : length * i) * 1000)),
-	//			this.log(i, requestLength, remained < maxChunkLength, remained, playlistURLParam.get('l'), playlistURLParam.get('seek'), startTime, totalDuration, remained < maxChunkLength ? totalDuration - length : length * i);
-	//			
-	//			await	this.getURLsFromM3U8(urlPlaylist + '?' + playlistURLParam, playlistOption).
-	//						then(urls => this.getURLsFromM3U8(urls[0])).then(urls => dlUrls.push(...urls)).catch(throwError);
-	//			
-	//		}
-	//		
-	//		const	dlUrlsLength = dlUrls.length;
-	//		
-	//		this.log(dlUrls),
-	//		
-	//		this.setActionTitle(`ダウンロード中... – ${prgLabel}`, tabId),
-	//		
-	//		prgFolder.file(prgFileName + '.json', JSON.stringify(DOMToObject(prg), null, '\t')),
-	//		prgCoverURL &&	await fetch(prgCoverURL).then(response => response.arrayBuffer()).
-	//								then(ab => prgFolder.file(prgCoverFileName, ab)),
-	//		
-	//		await	fetch(browser.runtime.getURL('resources/concat.bat')).then(response => response.text()).
-	//					then(text => prgFolder.file('concat.bat', text.replace(rxPicExt, `$1$2${prgCoverExt}$3`))).
-	//						catch(throwError);
-	//		
-	//		i = -1, concat = '';
-	//		while (++i < dlUrlsLength) {
-	//			
-	//			await	this.fetch(dlUrl = dlUrls[i]).then(response => response.arrayBuffer()).
-	//						then	(
-	//									ab =>	prgFolder.file	(
-	//																	'aac/' +
-	//																		(
-	//																			concatPath = (pathname = new URL(dlUrl).pathname).
-	//																				substring(pathname.lastIndexOf('/') + 1)
-	//																		),
-	//																	ab
-	//																)
-	//								).catch(throwError),
-	//			concat += `file '.\\aac\\${concatPath}'\n`;
-	//			
-	//		}
-	//		
-	//		prgFolder.file(prgFileName + '.txt', concat),
-	//		
-	//		await	zip.generateAsync	(
-	//											{ type: 'blob' },
-	//											({ currentFile, percent }) =>
-	//												this.setActionTitle(`ファイル作成中... ${percent|0}% – ${prgLabel}`, tabId)
-	//										).
-	//					then	(
-	//								blob =>	(
-	//												downloads.download({ filename: prgFileName + '.zip', saveAs: true, url: createObjectURL(blob) })
-	//											)
-	//							);
-	//		
-	//	}
-	//	
-	//}
 	
 	setSession(session) {
 		

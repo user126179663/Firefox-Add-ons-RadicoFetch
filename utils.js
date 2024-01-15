@@ -427,6 +427,34 @@ class Logger extends Binder {
 		
 	}
 	
+	static nest(start, startArgs, logger, end, ...values) {
+		
+		const { keys } = Object, { nest } = Logger, { length } = values;
+		let i,l,i0,k,k0,v,v0, ks, maxKeyLength;
+		
+		i = -1, Array.isArray(startArgs) ? start(...startArgs) : start(startArgs);
+		while (++i < length) {
+			
+			if ((v = values[i]) && typeof v === 'object') {
+				
+				i0 = -1, l = (ks = keys(v)).length, maxKeyLength = 0;
+				while (++i0 < l) maxKeyLength < (k = (''+ks[i0]).length) && (maxKeyLength = k);
+				
+				i0 = -1, start(`📦 (${l}) "${v.constructor.name}"`);
+				while (++i0 < l)	k0 = (''+(k = ks[i0])).padStart(maxKeyLength, ' '),
+										(v0 = v[k]) && typeof v0 === 'object' ?
+											nest(start, `[🗝️ ${k0}] 📦`, logger, end, v0) : logger(`[🗝️ ${k0}]`, v0);
+				
+				end();
+				
+			} else logger(v0);
+			
+		}
+		
+		end();
+		
+	}
+	
 	static replaceLoggerValues(values, replacer) {
 		
 		if (Array.isArray(values) && replacer && typeof replacer === 'object') {
@@ -487,6 +515,17 @@ class Logger extends Binder {
 		const { $replacer, getReplacedLoggerValue } = Logger;
 		
 		return getReplacedLoggerValue(values, this[$replacer]);
+		
+	}
+	
+	nest_(startArgs, loggerName = 'log', ...args) {
+		
+		Logger.nest(this.group, startArgs, this[loggerName], this.groupEnd, ...args);
+		
+	}
+	nest(startArgs, loggerName = 'log', ...args) {
+		
+		Logger.nest(this.groupCollapsed, startArgs, this[loggerName], this.groupEnd, ...args);
 		
 	}
 	

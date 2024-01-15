@@ -60,7 +60,7 @@ class Content extends WXLogger {
 				session.ft = ft,
 				session.cookie = document.cookie,
 				
-				log('"Authenticated."', Object.assign(storedSession, session)),
+				this.nest('"Authenticated."', 'log', Object.assign(storedSession, session)),
 				
 				sendResponse();
 				
@@ -88,7 +88,7 @@ class Content extends WXLogger {
 		
 		identify(message, tabId, stationId, ft, storedSession, sender, sendResponse, log) {
 			
-			log('"Making inquire a tabId."', storedSession),
+			this.nest('"Making inquire a tabId."', 'log', storedSession),
 			
 			//coco ダウンロード中に別ページに移動した時に別ページが番組ではない場合、ページアクションをダウンロード処理が完了するまで表示させ、完了後に消す処理
 			tabId === storedSession?.tabId &&
@@ -153,9 +153,9 @@ class Content extends WXLogger {
 			this.updateLogger(this.stationId = storedSession.stationId = pathParts[1]),
 			this.ft = storedSession.ft = pathParts[2],
 			
-			this.log('"Detected a program."', location.href, pathParts);
+			log('"Detected a program."', location.href, pathParts);
 			
-		} else this.log('"There seems not to be a page for a program."', pathParts);
+		} else log('"There seems not to be a page for a program."', pathParts);
 		
 		return !!pathParts;
 		

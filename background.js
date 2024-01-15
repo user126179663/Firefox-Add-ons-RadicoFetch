@@ -112,7 +112,9 @@ class Background extends Basement {
 													
 													delete req[tabId],
 													
-													log('"Finished downloading."', result ?? '✅', message.session),
+													this.groupCollapsed('"✅ Finished downloading."'),
+													log(message),
+													this.groupEnd(),
 													
 													browser.tabs.sendMessage(tabId, { type: 'downloaded' });
 													
@@ -125,13 +127,9 @@ class Background extends Basement {
 			
 			await table.update(),
 			
-			table.request(message.session.ft).finally(finalize),
+			log('"Attempting to request."', message),
 			
-			log('"Tried to request."', message);
-			
-			//(storedFetch[tabId] = new RadicoFetch()).request(message.session).finally(finalize),
-			
-			//log('"Tried a request."', message);
+			table.request(message.session.ft).finally(finalize);
 			
 		}
 		
