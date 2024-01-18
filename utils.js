@@ -244,11 +244,57 @@ class Mirror {
 	}
 	
 }
-class Binder {
+class Binder extends EventTarget {
 	
 	static *[Symbol.iterator]() {
 		
 		for (const prototype of Binder.getPrototypes(this)) yield prototype;
+		
+	}
+	
+	static DOMToObject(dom) {
+		
+		const { DOMToObject } = Binder;
+		
+		if (typeof dom?.[Symbol.iterator] === 'function') {
+			
+			const domLength = dom.length, array = [];
+			let i;
+			
+			i = -1;
+			while (++i < domLength) array[i] = DOMToObject(dom[i]);
+			
+			return array;
+			
+		} else if (dom instanceof Element) {
+			
+			const { attributes, children, tagName } = dom, object = { tagName }, attrs = object.attributes = {};
+			
+			for (const { name, value } of attributes) attrs[name] = value;
+			
+			Object.keys(attrs).length || delete object.attributes,
+			
+			children.length ? (object.children = DOMToObject(children)) : (object.textContent = dom.textContent);
+			
+			return object;
+			
+		}
+		
+	}
+	
+	// 第一引数 str を document.cookie が返す値として、それを第二引数に指定された KV のインスタンスに追加する。
+	// 実用上では KV ではなく Object で代用できると思うが、Object だと document.cookie の記述順が厳密には再現できなかったり、
+	// あるいは Object から document.cookie 相当の値を作成する時に、記述順を任意にできないと言う違いがある。
+	// そのため Object を列挙した Array でも代用可能だが、値の取り出し易さを考慮して KV を使っている。
+	static getCookie(str, cookie = new KV()) {
+		
+		const splitted = str.split(';'), length = splitted.length;
+		let i, v;
+		
+		i = -1, cookie instanceof KV || (cookie = new KV());
+		while (++i < length) cookie.append((v = splitted[i].split('='))[0].trim(), v[1].trim());
+		
+		return cookie;
 		
 	}
 	
@@ -316,7 +362,13 @@ class Binder {
 		
 	}
 	
-	constructor() {}
+	constructor() { super(); }
+	
+	emit(eventName, detail) {
+		
+		this.dispatchEvent(new CustomEvent(eventName, { detail }));
+		
+	}
 	
 	getBound(target) {
 		
@@ -397,6 +449,7 @@ class Logger extends Binder {
 		this[this.$logger] = {
 			
 			dir: { args: this[this.$defaultLoggerArgs], methodName: 'dir' },
+			error: { args: this[this.$defaultLoggerArgs], methodName: 'error' },
 			group: { args: this[this.$defaultLoggerArgs], methodName: 'group' },
 			groupCollapsed: { args: this[this.$defaultLoggerArgs], methodName: 'groupCollapsed' },
 			groupEnd: { args: this[this.$defaultLoggerArgs], methodName: 'groupEnd' },

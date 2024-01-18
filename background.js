@@ -1,4 +1,4 @@
-class Background extends Basement {
+class Background extends Action {
 	
 	static {
 		
@@ -104,7 +104,7 @@ class Background extends Basement {
 		async identified(message, tabId, sender, sendResponse, storedFetch, storedSession, log) {
 			
 			const	{ icon: { downloadable, requesting } } = Background,
-					{ requesting: req } = this,
+					{ groupCollapsed, groupEnd, requesting: req } = this,
 					finalize = result =>	{
 													
 													this.setActionIcon(downloadable, tabId),
@@ -112,9 +112,9 @@ class Background extends Basement {
 													
 													delete req[tabId],
 													
-													this.groupCollapsed('"✅ Finished downloading."'),
+													groupCollapsed('"✅ Finished downloading."'),
 													log(message),
-													this.groupEnd(),
+													groupEnd(),
 													
 													browser.tabs.sendMessage(tabId, { type: 'downloaded' });
 													
