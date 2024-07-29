@@ -30,11 +30,11 @@ class Content extends WXLogger {
 		
 		onMessage(message, sender, sendResponse) {
 			
-			const { log } = this;
+			const { log } = this, isObjectMessage = message && typeof message === 'object';
 			
-			log('"Received a message."', message, sender);
+			(isObjectMessage && message.skipsAnnounce) || log('"Received a message."', message, sender);
 			
-			if (message && typeof message === 'object') {
+			if (isObjectMessage) {
 				
 				const { ft, stationId, storedSession } = this, { tabId, type } = message;
 				
@@ -102,6 +102,18 @@ class Content extends WXLogger {
 						
 					})
 				);
+			
+		},
+		
+		ping(message, tabId, stationId, ft, storedSession, sender, sendResponse, log) {
+			
+			if ((typeof message === 'string' ? (message = { message }) : message) && typeof message === 'object') {
+				
+				const { message: msg, togglesCollapse } = message;
+				
+				this[typeof togglesCollapse === 'boolean' ? 'group' + (togglesCollapse ? 'Collapsed' : 'End') : 'log'](message.message);
+				
+			}
 			
 		},
 		

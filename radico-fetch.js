@@ -1,3 +1,92 @@
+class RadicoDate extends Date {
+	
+	static {
+		
+		this.rxRadicoDateStr = /(\d{4})([01]\d)([0-3]\d)([0-2]\d)([0-5][0-9])([0-5][0-9])/;
+		
+		this[Logger.$name] = '📻-⏰';
+		
+	}
+	
+	static convertToLocaleISODateString(z, date) {
+		
+		date = date instanceof Date ? new Date(date.getTime()) : new Date(...Array.from(arguments).slice(1)),
+		
+		Number.isNaN(z = parseInt(z)) && (z = date.getTimezoneOffset()),
+		
+		date.setTime(date.getTime() - z * 60000);
+		
+		const { abs } = Math, zH = parseInt(z / -60);
+		
+		return	date.toISOString().substring(0,19) + (z > 0 ? '-' : '+') +
+						zH.toString().padStart(2, '0') + ':' + (abs(z) - abs(zH * 60)).toString().padStart(2, '0');
+		
+	}
+	
+	static convertToRadicoPrgDate() {
+		
+		return new RadicoDate(...arguments).toProgramDate();
+		
+	}
+	
+	static createFromRadicoDateStr(rds) {
+		
+		return new RadicoDate(RadicoDate.createFromRadicoDateStr(rds));
+		
+	}
+	
+	static getDateStrByRadicoDateStr(rds) {
+		
+		return	typeof (rds instanceof RadicoDate ? (rds = ''+rds) : rds) === 'string' &&
+						RadicoDate.rxRadicoDateStr.test(rds) ?
+							`${rds.substr(0,4)}-${rds.substr(4,2)}-${rds.substr(6,2)} ${rds.substr(8,2)}:${rds.substr(10,2)}:${rds.substr(12,2)}` : rds;
+		
+	}
+	
+	constructor(v) {
+		
+		arguments.length === 1 ?
+			super(v instanceof Date ? v.getTime() : RadicoDate.getDateStrByRadicoDateStr(v)) :
+			super(...arguments);
+		
+	}
+	
+	setRadicoDateStr(rds) {
+		
+		return this.setTime(Date.parse(RadicoDate.getDateStrByRadicoDateStr(rds)));
+		
+	}
+	
+	toDateString() {
+		
+		return this.toString().substring(0,8);
+		
+	}
+	
+	toLocaleISODateString(z = this.getTimezoneOffset(), date = this, ...args) {
+		//https://api.radiko.jp/music/api/v1/noas/INT?start_time_gte=2024-01-23T02:54:00+09:00&end_time_lt=2024-01-23T03:00:00+09:00
+		// 2024-01-23T02:54:00+09:00
+		hi(date,arguments);
+		return RadicoDate.convertToLocaleISODateString(z, date, ...args);
+		
+	}
+	
+	toProgramDate() {
+		
+		const hours = this.getHours();
+		
+		return (hours > -1 && hours < 5 ? new RadicoDate(this.getTime() - 86400000) : this).toDateString();
+		
+	}
+	
+	toString() {
+		
+		return `${this.getFullYear()}${(this.getMonth() + 1 + '').padStart(2, '0')}${(this.getDate()+'').padStart(2, '0')}${(this.getHours()+'').padStart(2, '0')}${(this.getMinutes()+'').padStart(2, '0')}${(this.getSeconds()+'').padStart(2, '0')}`;
+		
+	}
+	
+}
+
 // このオブジェクトを使うには utils.js で定義されているオブジェクト KV が必須です。
 class Action extends WXLogger {
 	
@@ -88,6 +177,35 @@ class AbortableFetch extends Action {
 	static aborted(event) {
 		
 		this.log('"Fetching was aborted."', event);
+		
+	}
+	
+	static composeURL(url) {
+		
+		if (url instanceof URL || (url = URL.canParse(url) && (url = new URL(url)))) {
+			
+			const	{ host, password, pathname, port, protocol, username } = url;
+			
+			return url && `${protocol}\/\/${username || password ? `${username}:${password}@` : ''}${host}${pathname}`;
+			
+		}
+		
+		return null;
+		
+	}
+	
+	static getExtensionFromURL(url) {
+		
+		return (url instanceof URL ? url : new URL(url))?.pathname?.split?.('.')?.at?.(-1);
+		
+	}
+	
+	static getLastPathFromURL(url) {
+		
+		const endOfURL = (typeof url === 'string' ? url : (url = url.toString())).indexOf('?');
+		
+		return endOfURL === -1 ?	url.substring(url.lastIndexOf('/') + 1) :
+											url.slice(url.lastIndexOf('/') + 1, endOfURL - 1);
 		
 	}
 	
@@ -257,44 +375,233 @@ class RadicoSession extends Action {
 	}
 	
 }
-class RadicoPlaylistFetch extends AbortableFetch {
+class RadicoSessionFetch extends Action {
 	
 	static {
 		
-		this.$cookie = Symbol('RadicoPlaylistFetch.cookie'),
-		this.$reqHeaders = Symbol('RadicoPlaylistFetch.reqHeaders'),
-		this.$resHeaders = Symbol('RadicoPlaylistFetch.resHeaders'),
+		this.$cookie = Symbol('RadicoSessionFetch.cookie'),
+		this.$ftDate = Symbol('RadicoSessionFetch.ftDate'),
+		this.$reqHeaders = Symbol('RadicoSessionFetch.reqHeaders'),
+		this.$resHeaders = Symbol('RadicoSessionFetch.resHeaders'),
+		this.$session = Symbol('RadicoSessionFetch.$session'),
 		
-		this.rxM3U8Url = /^(https:\/\/.*?)$/gm,
-		this.rxPicExt = /(set picext=)/gm,
+		this[Logger.$name] = '📻-🎟️',
 		
-		this.maxChunkLength = 300,
-		
-		this.urlPlaylist = 'https://tf-f-rpaa-radiko.smartstream.ne.jp/tf/playlist.m3u8',
-		this.urlStationDate = 'https://radiko.jp/v3/program/station/date/',
-		
-		this.filter = { urls: [ '*://radiko.jp/*' ] },
-		this.reqExtraInfoSpec = [ 'requestHeaders' ],
-		this.resExtraInfoSpec = [ 'responseHeaders' ],
-		
-		this.dlOption = { saveAs: true },
-		this.metaBlobOption = { type: 'application/json' },
-		
-		this[Logger.$name] = '📻-🎼';
+		Object.defineProperty(
+			this.prototype,
+			this.$session,
+			{
+				get() {
+					
+					return this;
+					
+				},
+				set(v) {
+					
+					v && typeof v === 'object' && Object.assign(this, v);
+					
+				}
+			}
+		);
 		
 	}
 	
-	static composeURL(url) {
+	constructor(session, ...args) {
 		
-		if (url instanceof URL || (url = URL.canParse(url) && (url = new URL(url)))) {
+		super(...args);
+		
+		const { $cookie, $reqHeaders, $resHeaders, $session } = RadicoSessionFetch;
+		
+		this[$cookie] = new KV(),
+		this[$reqHeaders] = new KV(),
+		this[$resHeaders] = new KV(),
+		
+		this[$session] = session;
+		
+	}
+	
+	get cookie() {
+		
+		return this[RadicoSessionFetch.$cookie];
+		
+	}
+	set cookie(v) {
+		
+		if (v && typeof v === 'string') {
 			
-			const	{ host, password, pathname, port, protocol, username } = url;
+			const cookie = this[RadicoSessionFetch.$cookie];
 			
-			return url && `${protocol}\/\/${username || password ? `${username}:${password}@` : ''}${host}${pathname}`;
+			cookie.length = 0,
+			
+			Binder.getCookie(v, cookie);
+			
+		}
+		
+	}
+	get ft() {
+		
+		return this[RadicoSessionFetch.$ft];
+		
+	}
+	set ft(v) {
+		
+		this[RadicoSessionFetch.$ft] === v || (this.ftDate = v);
+		
+	}
+	get ftDate() {
+		
+		return this[RadicoSessionFetch.$ftDate];
+		
+	}
+	set ftDate(v) {
+		
+		this[RadicoSessionFetch.$ft] =
+			(this[RadicoSessionFetch.$ftDate] = Array.isArray(v) ? new RadicoDate(...v) : new RadicoDate(v)).toString();
+		
+	}
+	get reqHeaders() {
+		
+		return this[RadicoSessionFetch.$reqHeaders];
+		
+	}
+	set reqHeaders(v) {
+		
+		typeof v[Symbol.iterator] === 'function' && this[RadicoSessionFetch.$reqHeaders].addAll(v, 'name', 'value');
+		
+	}
+	get resHeaders() {
+		
+		return this[RadicoSessionFetch.$resHeaders];
+		
+	}
+	set resHeaders(v) {
+		
+		typeof v[Symbol.iterator] === 'function' && this[RadicoSessionFetch.$resHeaders].addAll(v, 'name', 'value');
+		
+	}
+	
+}
+class RadicoStationFetch extends AbortableFetch {
+	
+	static {
+		
+		this.$session = Symbol('RadicoStationFetch.session'),
+		
+		this[Logger.$name] = '📻-🚉';
+		
+	}
+	
+	constructor(session, ...args) {
+		
+		super(...args);
+		
+		this.session = session;
+		
+	}
+	
+	update(session, url, option, throws) {
+		
+		this.session = session;
+		
+		return this.fetch(url ?? this.url, option, throws).then(AbortableFetch.toJSON).then(json => (this.json = json));
+		
+	}
+	
+	get session() {
+		
+		return this[RadicoStationFetch.$session];
+		
+	}
+	set session(v) {
+		
+		v && typeof v === 'object' &&
+			(this[RadicoStationFetch.$session] = v instanceof RadicoSessionFetch ? v : new RadicoSessionFetch(v));
+		
+	}
+	
+	get station() {
+		
+		const { json: { stations }, session: { stationId } } = this, stationsLength = stations.length;
+		let i, v;
+		
+		i = -1;
+		while (++i < stationsLength && (v = stations[i]).station_id !== stationId);
+		
+		return i === stationsLength ? null : v;
+		
+	}
+	
+	get url() {
+		
+		const { session: { ftDate, stationId } } = this, dateStr = ftDate?.toProgramDate?.();
+		hi(this.session, ftDate, dateStr, stationId);
+		// 以下の this.constructor.url が返す値は継承先で任意に実装する必要がある。
+		// つまりこのオブジェクト単体では、第二引数 url に任意の値を指定しない限り、通常は機能しない。
+		return dateStr && stationId ? this.constructor.URL + dateStr + '/' + stationId + '.json' : '';
+		
+	}
+	
+}
+class RadicoTableFetch extends RadicoStationFetch {
+	
+	static {
+		
+		this[Logger.$name] = '📻-🧮';
+		
+	}
+	
+	constructor() {
+		
+		super(...arguments);
+		
+	}
+	
+	getProgramByFt(ft) {
+		
+		const { station: { programs: { program } } } = this;
+		
+		if (Array.isArray(program)) {
+			
+			const programLength = program.length;
+			let i, v;
+			
+			i = -1;
+			while (++i < programLength && (v = program[i]).ft !== ft);
+			
+			return i === programLength ? null : new RadicoPrgFetch(v);
 			
 		}
 		
 		return null;
+		
+	}
+	
+	toPrg(prg) {
+		
+		return prg instanceof RadicoPrgFetch ? prg : this.getProgramByFt(prg);
+		
+	}
+	
+	get tableDate() {
+		
+		const v = this.station?.date;
+		
+		return v && new RadicoDate(v.padEnd(14, '0'));
+		
+	}
+	
+}
+class RadicoPlaylistFetch extends RadicoTableFetch {
+	
+	static {
+		
+		this.rxM3U8Url = /^(https:\/\/.*?)$/gm,
+		
+		this.maxChunkLength = 300,
+		
+		this.urlPlaylist = 'https://tf-f-rpaa-radiko.smartstream.ne.jp/tf/playlist.m3u8',
+		
+		this[Logger.$name] = '📻-🎼';
 		
 	}
 	
@@ -310,83 +617,39 @@ class RadicoPlaylistFetch extends AbortableFetch {
 		
 	}
 	
-	static getLastPathFromURL(url) {
+	constructor() {
 		
-		const endOfURL = (typeof url === 'string' ? url : (url = url.toString())).indexOf('?');
-		
-		return endOfURL === -1 ?	url.substring(url.lastIndexOf('/') + 1) :
-											url.slice(url.lastIndexOf('/') + 1, endOfURL - 1);
-		
-	}
-	//static getLastPathFromURL(url) {
-	//	
-	//	url instanceof URL || (url = new URL(url));
-	//	
-	//	const { pathname } = url;
-	//	
-	//	return pathname.substring(pathname.lastIndexOf('/') + 1);
-	//	
-	//}
-	
-	constructor(session) {
-		
-		super();
-		
-		this.setSession(session);
+		super(...arguments);
 		
 	}
 	
-	//convertToXmlDate() {
-	//	
-	//	const { tableDate } = this, rd = new RadicoDate(...arguments), hours = rd.getHours();
-	//	
-	//	tableDate === rd.toDateString().substring(0, 7) && hours > -1 && hours < 5 &&
-	//		rd.setTime(rd.getTime() + 86400000);
-	//	
-	//	//const hours = (rd instanceof RadicoDate ? rd : (rd = new RadicoDate(...arguments))).getHours();
-	//	//
-	//	//(hours > -1 || hours < 5) && rd.setTime(rd.getTime() + 86400000);
-	//	
-	//	return rd;
-	//	
-	//}
-	//convertToXmlDate(rd) {
-	//	
-	//	const hours = (rd instanceof RadicoDate ? rd : (rd = new RadicoDate(...arguments))).getHours();
-	//	
-	//	(hours > -1 || hours < 5) && rd.setTime(rd.getTime() + 86400000);
-	//	
-	//	return rd;
-	//	
-	//}
+	createPlaylistFetchParam(prg) {
+		
+		const { session: { cookie, stationId } } = this, { ft, to } = prg;
+		
+		return	[
+						{ k: 'station_id', v: stationId },
+						{ k: 'start_at', v: ft },
+						{ k: 'ft', v: ft },
+						{ k: 'end_at', v: to },
+						{ k: 'to', v: to },
+						{ k: 'l', v: RadicoPlaylistFetch.maxChunkLength },
+						{ k: 'lsid', v: cookie?.get?.('a_exp') },
+						// この値の定義は不明。
+						{ k: 'type', v: 'b' }
+					];
+		
+	}
 	
 	createPlaylistURLFromPrg(prg) {
 		
-		if (prg = this.isPrg(prg)) {
+		if (prg = this.toPrg(prg)) {
 			
-			const { cookie } = this, a_exp = cookie?.get?.('a_exp');
+			const { urlPlaylist } = RadicoPlaylistFetch, param = new URLSearchParams('');
 			
-			if (a_exp) {
-				
-				const	{ maxChunkLength, urlPlaylist } = RadicoPlaylistFetch,
-						{ ft, to } = prg,
-						param = new URLSearchParams(''),
-						values =	[
-										{ k: 'station_id', v: this.stationId },
-										{ k: 'start_at', v: ft },
-										{ k: 'ft', v: ft },
-										{ k: 'end_at', v: to },
-										{ k: 'to', v: to },
-										{ k: 'l', v: maxChunkLength },
-										{ k: 'lsid', v: cookie?.get?.('a_exp') },
-										{ k: 'type', v: 'b' }
-									];
-				
-				for (const { k, v } of new KV(values)) param.set(k, v);
-				
-				return new URL(urlPlaylist + '?' + param);
-				
-			}
+			for (const { k, v } of this.createPlaylistFetchParam(prg)) v && param.set(k, v);
+			
+			return new URL(urlPlaylist + '?' + param);
 			
 		}
 		
@@ -400,9 +663,44 @@ class RadicoPlaylistFetch extends AbortableFetch {
 		
 	}
 	
-	getPlaylistFetchOption() {
+	async fetchPlaylist(prg, pingTabId) {
 		
-		const	{ cookie, resHeaders } = this,
+		if (prg = this.toPrg(prg)) {
+			
+			const	{ maxChunkLength } = RadicoPlaylistFetch,
+					{ duration, startTime, to } = prg,
+					{ groupCollapsed, groupEnd, log, playlistFetchOption: option } = this,
+					url = this.createPlaylistURLFromPrg(prg),
+					param = url.searchParams,
+					l = parseInt(duration / maxChunkLength),
+					rd = new RadicoDate(),
+					fetched = [];
+			let i, length, remains, exceeds, currentDuration;
+			
+			i = -1, this.ping(pingTabId, `"📤 Extracting URLs from ${url}."`, true), currentDuration = 0;
+			while (++i <= l && (remains = duration - i * maxChunkLength) > 0) {
+				
+				param.set('l', length = (exceeds = remains < maxChunkLength) ? remains : maxChunkLength),
+				rd.setTime(startTime + (exceeds ? duration - length : length * i) * 1000),
+				param.set('seek', rd.toString()),
+				
+				this.ping(pingTabId, `"${exceeds ? '⌛' : '⏳'} ${i}/${l} [Seek: ${param.get('seek')}, Duration(sec.): [Accumulation: ${currentDuration += length}/${duration}, Length: ${length})]]"`),
+				
+				await	this.extractURLsFromM3U8(url, option).then(urls => this.extractURLsFromM3U8(urls[0])).
+							then(urls => fetched.push(...urls));
+				
+			}
+			this.ping(pingTabId, undefined, false);
+			
+			return fetched;
+			
+		}
+		
+	}
+	
+	get playlistFetchOption() {
+		
+		const	{ session: { cookie, resHeaders } } = this,
 				defaultAreaId = cookie?.get?.('default_area_id'),
 				authtoken = resHeaders?.get?.('x-radiko-authtoken');
 		
@@ -411,333 +709,16 @@ class RadicoPlaylistFetch extends AbortableFetch {
 		
 	}
 	
-	async fetchPlaylist(prg) {
-		
-		if (prg = this.isPrg(prg)) {
-			
-			const	{ maxChunkLength } = RadicoPlaylistFetch,
-					{ duration, startTime, to } = prg,
-					{ groupCollapsed, groupEnd, log } = this,
-					url = this.createPlaylistURLFromPrg(prg),
-					param = url.searchParams,
-					option =	this.getPlaylistFetchOption(),
-					l = parseInt(duration / maxChunkLength),
-					rd = new RadicoDate(),
-					fetched = [];
-			let i, length, remains, exceeds, currentDuration;
-			
-			i = -1, groupCollapsed(`"📤 Extracting URLs from ${url}."`), currentDuration = 0;
-			while (++i <= l && (remains = duration - i * maxChunkLength) > 0) {
-				
-				param.set('l', length = (exceeds = remains < maxChunkLength) ? remains : maxChunkLength),
-				rd.setTime(startTime + (exceeds ? duration - length : length * i) * 1000),
-				param.set('seek', rd.toString()),
-				
-				log(`"${exceeds ? '⌛' : '⏳'} ${i}/${l} [Seek: ${param.get('seek')}, Duration(sec.): [Accumulation: ${currentDuration += length}/${duration}, Length: ${length})]]"`),
-				
-				await	this.extractURLsFromM3U8(url, option).then(urls => this.extractURLsFromM3U8(urls[0])).
-							then(urls => fetched.push(...urls));
-				
-			}
-			groupEnd();
-			
-			return fetched;
-			
-		}
-		
-	}
-	
-	//async request(prg) {
-	//	
-	//	if (prg instanceof RadicoPrgFetch ? prg : (prg = this.getPrgByFt(prg))) {
-	//		
-	//		const	{ throwError } = AbortableFetch,
-	//				{ getLastPathFromURL, maxChunkLength, metaBlobOption, rxPicExt } = RadicoPlaylistFetch,
-	//				{ dateLabel, duration, ft, ftl, imgExt, imgURL, prgDateStr, startTime, title, to, tol } = prg,
-	//				{ cookie, log, reqHeaders, resHeaders, stationId, tabId } = this,
-	//				stLabel = this.getStLabel(),
-	//				prgFileName = stLabel + ' ' + title + ' – ' + dateLabel,
-	//				prgImgFileName = prgFileName + '.' + imgExt,
-	//				current =	{
-	//									dateLabel, duration, ft, ftl, imgExt, imgURL, prgDateStr, startTime, title, to, tol,
-	//									cookie, log, reqHeaders, resHeaders, stationId, tabId
-	//								};
-	//		let i, length, remained, exceeds, dlUrl, pathname, concat,concatPath, currentDuration, url, zipped;
-	//		
-	//		const playlist = await this.fetchPlaylist(prg), playlistLength = playlist.length;
-	//		
-	//		i = -1, this.groupCollapsed(`"📥 Downloading ${playlistLength} files... (${getLastPathFromURL(dlUrls[0])} – ${getLastPathFromURL(dlUrls[playlistLength - 1])})"`);
-	//		while (++i < playlistLength)	log(`📥 ${i + 1}/${playlistLength}. `, playlist[i]),
-	//												await	this.fetchAB(url = playlist[i]);
-	//		this.groupEnd(),
-	//		
-	//		log(`"📁 Zipping files into <${prgFileName}.zip>..."`, );
-	//		
-	//	}
-	//	
-	//	return Promise.reject();
-	//	
-	//}
-	
-	getPrgByFt(ft) {
-		
-		return new RadicoPrgFetch(this.querySelector(`prog[ft="${ft}"]`) ?? ft);
-		
-	}
-	
-	isPrg(prg) {
-		
-		return prg instanceof RadicoPrgFetch ? prg : this.getPrgByFt(prg);
-		
-	}
-	
-	setSession(session) {
-		
-		if (session && typeof session === 'object') {
-			
-			const { cookie, ft, reqHeaders, resHeaders, stationId, tabId } = this.session = { ...session };
-			
-			this.cookie = cookie,
-			this.date = new RadicoDate(this.ft = ft),
-			this.reqHeaders = reqHeaders,
-			this.resHeaders = resHeaders,
-			this.stationId = stationId,
-			this.tabId = tabId;
-			
-		}
-		
-		return this.session ??= {};
-		
-	}
-	
-	querySelector(selector) {
-		
-		return this.dom?.querySelector?.(selector);
-		
-	}
-	
-	// 以下の this.url が返す値は継承先で任意に実装する必要がある。
-	// つまりこのオブジェクト単体では、第二引数 url に任意の値を指定しない限り、通常は機能しない。
-	update(session, url = this.url) {
-		
-		session && this.setSession(session);
-		
-		return	this.fetch(url).then(AbortableFetch.toText).
-						then(text => (this.dom = new DOMParser().parseFromString(this.xml = text, 'text/xml'))).
-							catch(AbortableFetch.throwError);
-		
-	}
-	
-	get cookie() {
-		
-		return Binder.getCookie(this[RadicoPlaylistFetch.$cookie]);
-		
-	}
-	set cookie(v) {
-		
-		this[RadicoPlaylistFetch.$cookie] = v;
-		
-	}
-	get tableDate() {
-		
-		return this.dom?.querySelector?.('date')?.textContent ?? '';
-		
-	}
-	get reqHeaders() {
-		
-		const v = this[RadicoPlaylistFetch.$reqHeaders];
-		
-		return new KV(v && typeof v === 'object' ? v : {}, 'name', 'value');
-		
-	}
-	set reqHeaders(v) {
-		
-		this[RadicoPlaylistFetch.$reqHeaders] = v;
-		
-	}
-	
-	get resHeaders() {
-		
-		const v = this[RadicoPlaylistFetch.$resHeaders];
-		
-		return new KV(v && typeof v === 'object' ? v : {}, 'name', 'value');
-		
-	}
-	set resHeaders(v) {
-		
-		this[RadicoPlaylistFetch.$resHeaders] = v;
-		
-	}
-	
 }
 class RadicoFetch extends RadicoPlaylistFetch {
 	
 	static {
 		
+		this.rxPicExt = /(set picext=)/gm,
+		this.zipOption = { type: 'blob' },
+		this.tuneListURL = 'https://api.radiko.jp/music/api/v1/noas/',
+		
 		this[Logger.$name] = '📻-📥';
-		
-	}
-	
-	constructor(session) {
-		
-		super(session);
-		
-	}
-	
-	getPrgLabel(prg, withDate) {
-		
-		const { stLabel } = this;
-		
-		if (arguments.length > 1) {
-			
-			const title = (prg = this.isPrg(prg)) === false ? prg : prg.title, label = stLabel + (title ? ' ' + title : '');
-			
-			return title ?	label + (typeof withDate === 'string' ? withDate : ' – ') + prg.dateLabel :
-								label + (typeof withDate === 'string' ? withDate : ' ') + prg.dateLabel;
-			
-		} else return stLabel + ((prg = (prg === false ? '' : this.isPrg(prg).title)) ? '' : ' ' + prg);
-		
-	}
-	
-	async request(prg) {
-		
-		const	{ createObjectURL, revokeObjectURL } = URL,
-				{ throwError } = AbortableFetch,
-				{ getLastPathFromURL, rxPicExt } = RadicoPlaylistFetch,
-				{ downloads, runtime } = browser,
-				{ dateLabel, duration, imgExt, imgURL } = (prg = this.isPrg(prg)),
-				{ error, groupCollapsed, groupEnd, log, tabId } = this,
-				label = this.getPrgLabel(prg, true),
-				name = ' – ' + this.getPrgLabel(prg),
-				zip = new JSZip(),
-				prgFolder = zip.folder(label);
-		let i, url, filName, concat, zipped;
-		
-		this.setActionTitle(`📤 プレイリストから情報を抽出中...${name}`, tabId);
-		
-		const playlist = await this.fetchPlaylist(prg), playlistLength = playlist.length;
-		
-		this.setActionTitle(`⏳ ダウンロード中... 時間がかかる場合があります${name}`, tabId),
-		
-		i = -1, concat = '',
-		groupCollapsed(`"📥 Downloading ${playlistLength} files... (${getLastPathFromURL(playlist[0])} – ${getLastPathFromURL(playlist[playlistLength - 1])})"`);
-		while (++i < playlistLength) log(`📥 ${i + 1}/${playlistLength}. `, playlist[i]),
-												await	this.fetchAB(url = playlist[i], undefined, false).
-													then(ab => prgFolder.file('aac/' + (filName = getLastPathFromURL(url)), ab)).
-														catch(throwError),
-												concat += `file '.\\aac\\${filName}'\n`;
-		groupEnd(),
-		
-		this.setActionTitle(`📂 ファイルの作成中...${name}`, tabId);
-		
-		// metadata
-		prgFolder.file(label + '.json', prg.toJSON(null, '\t')),
-		
-		// img
-		await	prg.fetchImg(undefined, false).then(ab => prgFolder.file(label + '.' + imgExt, ab)).catch(error),
-		
-		// bat
-		await this.fetchText(runtime.getURL('resources/concat.bat'), undefined, false).
-			then(text => prgFolder.file('concat.bat', text.replaceAll(rxPicExt, `$1${imgExt}`))).catch(error)
-		
-		prgFolder.file(label + '.txt', concat),
-		
-		await zip.generateAsync
-			(
-				{ type: 'blob' },
-				({ percent }) => this.setActionTitle(`${percent|0}% 圧縮...${name}`, tabId)
-			).then(blob => (zipped = blob)).catch(throwError);
-		
-		return	downloads.download({ filename: label + '.zip', saveAs: true, url: createObjectURL(zipped) }).
-						catch(error).finally(() => (revokeURLObject(zipped), zipped));
-		
-	}
-	
-	get stLabel() {
-		
-		return '[' + this.stationId + ']';
-		
-	}
-	
-}
-class RadicoDate extends Date {
-	
-	static {
-		
-		this.URL = 'https://radiko.jp/v3/program/station/date/',
-		
-		this[Logger.$name] = '📻-⏰';
-		
-	}
-	
-	static {
-		
-		this.rxRadicoDateStr = /(\d{4})([01]\d)([0-3]\d)([0-2]\d)([0-5][0-9])([0-5][0-9])/;
-		
-	}
-	
-	static convertToRadicoPrgDate() {
-		
-		return new RadicoDate(...arguments).toProgramDate();
-		
-	}
-	
-	static createFromRadicoDateStr(rds) {
-		
-		return new RadicoDate(RadicoDate.createFromRadicoDateStr(rds));
-		
-	}
-	
-	static getDateStrByRadicoDateStr(rds) {
-		
-		return	typeof (rds instanceof RadicoDate ? (rds = ''+rds) : rds) === 'string' &&
-						RadicoDate.rxRadicoDateStr.test(rds) ?
-							`${rds.substr(0,4)}-${rds.substr(4,2)}-${rds.substr(6,2)} ${rds.substr(8,2)}:${rds.substr(10,2)}:${rds.substr(12,2)}` : rds;
-		
-	}
-	
-	constructor(v) {
-		
-		arguments.length === 1 ?
-			super(v instanceof Date ? v.getTime() : RadicoDate.getDateStrByRadicoDateStr(v)) :
-			super(...arguments);
-		
-	}
-	
-	setRadicoDateStr(rds) {
-		
-		return this.setTime(Date.parse(RadicoDate.getDateStrByRadicoDateStr(rds)));
-		
-	}
-	
-	toDateString() {
-		
-		return this.toString().substring(0,8);
-		
-	}
-	
-	toProgramDate() {
-		
-		const hours = this.getHours();
-		
-		return (hours > -1 && hours < 5 ? new RadicoDate(this.getTime() - 86400000) : this).toDateString();
-		
-	}
-	
-	toString() {
-		
-		return `${this.getFullYear()}${(this.getMonth() + 1 + '').padStart(2, '0')}${(this.getDate()+'').padStart(2, '0')}${(this.getHours()+'').padStart(2, '0')}${(this.getMinutes()+'').padStart(2, '0')}${(this.getSeconds()+'').padStart(2, '0')}`;
-		
-	}
-	
-}
-class RadicoDailyTableFetch extends RadicoFetch {
-	
-	static {
-		
-		this.URL = 'https://radiko.jp/v3/program/station/date/';
-		
-		this[Logger.$name] = '📻-📆';
 		
 	}
 	
@@ -747,36 +728,153 @@ class RadicoDailyTableFetch extends RadicoFetch {
 		
 	}
 	
-	get url() {
+	getPrgLabel(prg, withDate) {
 		
-		const { date, stationId } = this;
+		const { stLabel } = this;
 		
-		return RadicoDailyTableFetch.URL + date.toProgramDate() + '/' + stationId + '.xml';
+		if (arguments.length > 1) {
+			
+			const title = (prg = this.toPrg(prg)) === false ? prg : prg.title, label = stLabel + (title ? ' ' + title : '');
+			
+			return title ?	label + (typeof withDate === 'string' ? withDate : ' – ') + prg.dateLabel :
+								label + (typeof withDate === 'string' ? withDate : ' ') + prg.dateLabel;
+			
+		} else return stLabel + ((prg = (prg === false ? '' : this.toPrg(prg)?.title)) ? '' : ' ' + prg);
+		
+	}
+	
+	async request(prg = this.session?.ft, pingTabId) {
+		
+		const	{ createObjectURL, revokeObjectURL } = URL,
+				{ getLastPathFromURL, throwError } = AbortableFetch,
+				{ rxPicExt, tuneListURL, zipOption } = RadicoFetch,
+				{ downloads, runtime, tabs } = browser,
+				{ dateLabel, duration, ftDate, imgExt, imgURL, toDate } = (prg = this.toPrg(prg)),
+				{ error, groupCollapsed, groupEnd, log, session: { stationId, tabId }, stLabel } = this,
+				label = this.getPrgLabel(prg, true),
+				name = ' – ' + this.getPrgLabel(prg),
+				zip = new JSZip(),
+				prgFolder = zip.folder(label);
+		let i, url, filName, concat, zipped;
+		
+		this.setActionTitle(`📤 プレイリストから情報を抽出中...${name}`, tabId);
+		
+		const playlist = await this.fetchPlaylist(prg, pingTabId), playlistLength = playlist.length;
+		
+		this.setActionTitle(`⏳ ダウンロード中... 時間がかかる場合があります${name}`, tabId),
+		
+		i = -1, concat = '',
+		this.ping(pingTabId, `"📥 Downloading ${playlistLength} files... (${getLastPathFromURL(playlist[0])} – ${getLastPathFromURL(playlist[playlistLength - 1])})"`, true);
+		while (++i < playlistLength)	this.ping(pingTabId, `📥 ${i + 1}/${playlistLength}. `, playlist[i]),
+											await	this.fetchAB(url = playlist[i], undefined, false).
+												then(ab => prgFolder.file('aac/' + (filName = getLastPathFromURL(url)), ab)).
+													catch(throwError),
+											concat += `file '.\\aac\\${filName}'\n`;
+		this.ping(pingTabId, undefined, false),
+		
+		this.setActionTitle(`📂 ファイルの作成中...${name}`, tabId);
+		
+		//https://api.radiko.jp/music/api/v1/noas/INT?start_time_gte=2024-01-23T02:54:00+09:00&end_time_lt=2024-01-23T03:00:00+09:00
+		await	this.fetchJSON(`${tuneListURL}${stationId}?start_time_gte=${ftDate.toLocaleISODateString(-540).replace('+', '%2B')}&end_time_lt=${toDate.toLocaleISODateString(-540).replace('+', '%2B')}`).
+					then	(
+								async json =>	{
+													
+													const { data } = json, dataLength = data.length;
+													
+													if (dataLength) {
+														
+														const	{ getExtensionFromURL } = AbortableFetch,
+																list = prgFolder.folder('tune-list');
+														let i,k, current, datum, id, fn, image, url;
+														
+														i = -1;
+														while (++i < dataLength) {
+															
+															current =
+																list.folder(id = stLabel + ' ' + (datum = data[i]).id.replace('T', ' ').replaceAll(':', '-')),
+															fn = datum.title + ' – ' + datum.artist_name;
+															
+															for (k in (image = datum.music.image))
+																await	this.fetchAB(url = image[k]).
+																			then(ab => current.file(`${fn}.${k}.${getExtensionFromURL(url)}`, ab));
+															
+															current.file(id + '.json', JSON.stringify(datum, null, '\t'));
+															
+														}
+														
+														list.file(label + '.tune-list.json', JSON.stringify(json, null, '\t'));
+														
+													}
+													
+												}
+							),
+		
+		
+		// metadata
+		prgFolder.file(label + '.json', prg.toJSON(null, '\t')),
+		
+		// img
+		await	prg.fetchImg(undefined, false).then(ab => prgFolder.file(label + '.' + imgExt, ab)).catch(error),
+		
+		// batch file
+		await this.fetchText(runtime.getURL('resources/concat.bat'), undefined, false).
+			then(text => prgFolder.file('concat.bat', text.replaceAll(rxPicExt, `$1${imgExt}`))).catch(error)
+		
+		prgFolder.file(label + '.txt', concat),
+		
+		this.ping(pingTabId, `Starting Compression... "${name}"`, true),
+		await	zip.generateAsync(zipOption, ({ percent }) => (this.setActionTitle(`${percent|0}% 圧縮...${name}`, this.ping(pingTabId, `${percent|0}% compressed...`)), tabId)).
+					then(blob => (zipped = blob)).catch(throwError);
+		this.ping(pingTabId, undefined, false);
+		
+		return	downloads.download({ filename: label + '.zip', saveAs: true, url: createObjectURL(zipped) }).
+						catch(error).finally(() => (revokeObjectURL(zipped), zipped));
+		
+	}
+	
+	get stLabel() {
+		
+		return '[' + this.session.stationId + ']';
 		
 	}
 	
 }
+class RadicoDailyTableFetch extends RadicoFetch {
+	
+	static {
+		
+		this.URL = 'https://radiko.jp/v4/program/station/date/',
+		
+		this[Logger.$name] = '📻-📆';
+		
+	}
+	
+	constructor() { super(...arguments); }
+	
+}
+
 class RadicoPrgFetch extends AbortableFetch {
 	
 	static {
 		
 		this.$ftDate = Symbol('RadicoPrgFetch.ftDate'),
+		this.$json = Symbol('RadicoPrgFetch.json'),
 		this.$toDate = Symbol('RadicoPrgFetch.toDate'),
 		
 		this[Logger.$name] = '📻-🎙️';
 		
 	}
 	
-	constructor(dom) {
+	constructor(json, ...args) {
 		
-		super();
+		super(...args);
 		
 		const { $ftDate, $toDate } = RadicoPrgFetch;
 		
 		this[$ftDate] = new RadicoDate(),
 		this[$toDate] = new RadicoDate(),
 		
-		this.setDOM(dom);
+		this.json = json;
 		
 	}
 	
@@ -790,25 +888,13 @@ class RadicoPrgFetch extends AbortableFetch {
 		
 	}
 	
-	setDOM(dom) {
-		
-		return dom instanceof Node ? (this.dom = dom) : this.dom;
-		
-	}
-	
-	toObject() {
-		
-		return Binder.DOMToObject(this.dom);
-		
-	}
-	
 	toJSON(replacer, space) {
 		
 		let json;
 		
 		try {
 			
-			json = JSON.stringify(this.toObject(), replacer, space);
+			json = JSON.stringify(this.json, replacer, space);
 			
 		} catch (error) {
 			
@@ -847,12 +933,12 @@ class RadicoPrgFetch extends AbortableFetch {
 	}
 	get ft() {
 		
-		return this.dom?.getAttribute?.('ft') ?? '';
+		return this.json?.ft ?? '';
 		
 	}
 	get ftDate() {
 		
-		const v = this.dom?.getAttribute?.('ft'), date = v && this[RadicoPrgFetch.$ftDate];
+		const v = this.ft, date = v && this[RadicoPrgFetch.$ftDate];
 		
 		return date ? (date.setRadicoDateStr(v), date) : '';
 		
@@ -864,17 +950,45 @@ class RadicoPrgFetch extends AbortableFetch {
 	}
 	get ftl() {
 		
-		return this.dom?.getAttribute?.('ftl') ?? '';
+		return this.json?.ftl ?? '';
 		
 	}
 	get imgURL() {
 		
-		return this.dom?.querySelector?.('img').textContent ?? null;
+		return this.json?.img ?? null;
 		
 	}
 	get imgExt() {
 		
-		return new URL(this.imgURL)?.pathname?.split?.('.')?.at?.(-1);
+		return AbortableFetch.getExtensionFromURL(this.imgURL);
+		
+	}
+	get json() {
+		
+		const v = this[RadicoPrgFetch.$json];
+		
+		return v && typeof v === 'object' ? v : null;
+		
+	}
+	set json(json) {
+		
+		if (typeof json === 'string') {
+			
+			try {
+				
+				json = JSON.parse(json);
+				
+			} catch (error) {
+				
+				this.error(error);
+				
+				return;
+				
+			}
+			
+		}
+		
+		json && typeof json === 'object' && (this[RadicoPrgFetch.$json] = json);
 		
 	}
 	get startTime() {
@@ -884,19 +998,19 @@ class RadicoPrgFetch extends AbortableFetch {
 	}
 	get to() {
 		
-		return this.dom?.getAttribute?.('to') ?? '';
+		return this.json?.to ?? '';
 		
 	}
 	get toDate() {
 		
-		const v = this.dom?.getAttribute?.('to'), date = v && this[RadicoPrgFetch.$toDate];
+		const v = this.to, date = v && this[RadicoPrgFetch.$toDate];
 		
 		return date ? (date.setRadicoDateStr(v), date) : '';
 		
 	}
 	get tol() {
 		
-		return this.dom?.getAttribute?.('tol') ?? '';
+		return this.json?.tol ?? '';
 		
 	}
 	get prgDateStr() {
@@ -906,7 +1020,7 @@ class RadicoPrgFetch extends AbortableFetch {
 	}
 	get title() {
 		
-		return this.dom?.querySelector?.('title')?.textContent ?? '';
+		return this.json?.title ?? '';
 		
 	}
 	

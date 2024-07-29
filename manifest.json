@@ -2,7 +2,7 @@
 	
 	"background": {
 		
-		"scripts": [ "utils.js", "jszip.min.js", "radico-fetch.js", "background.js" ],
+		"scripts": [ "utils.js", "jszip.min.js", "protobuf.min.js", "radico-fetch.js", "background.js" ],
 		"persistent": false
 		
 	},
@@ -29,7 +29,16 @@
 		
 	},
 	
-	"permissions": [ "*://radiko.jp/*", "*://*.smartstream.ne.jp/*", "downloads", "tabs", "webRequest" ],
+	"permissions": [
+		"*://radiko.jp/*",
+		"*://api.radiko.jp/*",
+		"*://*.annex.radiko.jp/*",
+		"*://*.smartstream.ne.jp/*",
+		"*://*.cf.radiko.jp/*",
+		"downloads",
+		"tabs",
+		"webRequest"
+	],
 	
 	"web_accessible_resources": [
 		
@@ -37,6 +46,6 @@
 		
 	],
 	
-	"version": "0.1"
+	"version": "0.1.2"
 	
 }

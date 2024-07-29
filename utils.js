@@ -690,4 +690,14 @@ class WXLogger extends Logger {
 	
 	constructor() { super(...arguments); }
 	
+	// このメソッドによるコンソールログの表示は、実行ファイルや行数がこのメソッド内のそれに固定されてしまうため実用的ではない。
+	// しかし可読性や保守性の確保、または実装の容易さを優先して現状のようになっている。可能であれば代替策を考えるべき。
+	ping(tabId, message, togglesCollapse) {
+		
+		this[typeof togglesCollapse === 'boolean' ? 'group' + (togglesCollapse ? 'Collapsed' : 'End') : 'log'](message),
+		
+		browser.tabs.sendMessage(tabId, { type: 'ping', message, skipsAnnounce: true, togglesCollapse });
+		
+	}
+	
 }

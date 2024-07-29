@@ -129,7 +129,7 @@ class Background extends Action {
 			
 			log('"Attempting to request."', message),
 			
-			table.request(message.session.ft).finally(finalize);
+			table.request(undefined, tabId).finally(finalize);
 			
 		}
 		
